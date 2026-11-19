@@ -1,0 +1,46 @@
+# indlela-api — Claude Code project instructions
+
+Laravel 13 backend for **Indlela**, an SEO tool for agencies and SMEs in South Africa (Search Console dashboard and quick wins, site audit, rank tracking, white-label reports; later local map grid, competitors, alerts). PostgreSQL database `indlela`, run locally with Laravel Sail. The SPA is the separate repo `../indlela` (React/Vite, ported from `../workforce-app`).
+
+Auth, users, roles, login history, email templates and the audit trail are ported from `../workforce-api` (read only: never change it from here). When something exists there, port it rather than reinventing, and keep its style.
+
+Progress (built, next, waiting on other modules) lives in `docs/PROGRESS.md` (git-ignored dev notes, kept identical in both repos), updated with every module. Routes are documented in `docs/API.md` (method, path, permission, purpose), never in README; update it with every route change.
+
+## Architecture invariants
+
+- **Tenancy.** A `workspace` is a tenant (an agency or an SME). Users join through `workspace_user` (one account may be in several) and act in `users.current_workspace_id`. Every authenticated route uses `['auth:sanctum', 'active', 'workspace']`; the `workspace` middleware (`SetCurrentWorkspace` → `WorkspaceContext::enter`) sets `App\Support\CurrentWorkspace` and spatie's team id, and runs before route model binding (priority list in `bootstrap/app.php`). A user in no workspace gets 403 `no_workspace`.
+- **Two walls on workspace data.** Workspace-owned models (`Client`, `Site`, `EmailTemplate`, everything SEO to come) use `App\Traits\BelongsToWorkspace`: a global scope on the current workspace and `workspace_id` stamped on create, so another workspace's id 404s. Their Policies check `workspace_id` again (`Policies\Concerns\ChecksWorkspace`). New models carrying tenant data must do both, and a tenancy test (see `tests/Feature/Tenancy`) must prove A can't read or change B's rows. Outside a request (console, queue, seeders) no workspace is set and the scope doesn't filter: pass workspaces explicitly or wrap work in `CurrentWorkspace::using()`. Queued jobs must carry their workspace id.
+- **Roles are per workspace** (spatie/laravel-permission with teams, `team_foreign_key = workspace_id`); permissions are global. `Role` deliberately has no global scope (spatie caches permissions with their roles across workspaces): query roles with `Role::inCurrentWorkspace()` / `inWorkspace($id)`; `{role}` and `{user}` route bindings are limited to the current workspace in `AppServiceProvider`. After changing the team id, unset a user's `roles`/`permissions` relations.
+- **Default roles** come from `App\Services\Workspaces\WorkspaceProvisioner` on workspace creation (sign-up, `POST /workspaces`, `UserSeeder`): Owner (everything, always; can't be renamed, changed or deleted; a workspace keeps one active Owner — workforce's System Administrator), Manager, Analyst, Client. `RolePermissionSeeder` re-syncs the catalogue and runs `ensureDefaultRoles` for every workspace without overwriting edited roles.
+- **Client access.** `roles.all_clients` decides whether members see every client of the workspace (Owner, Manager) or only those in `client_user` (Analyst, Client). Check with `$user->canAccessClient()` in Policies, scope lists with `->accessibleBy($user)` / `$user->accessibleClientIds()`. Assign clients with `UserManagementService` (its `syncClients` only touches the current workspace; never `$user->clients()->sync()`).
+- Auth: Sanctum Bearer tokens. The login response is workforce's (`message, user, token, token_type, roles, permissions`) plus `workspace` and `workspaces` (`App\Support\AccountState`), so the ported FE reads it unchanged; `/me` and the workspace switch return the same without the token. Change both sides together.
+- Two-step sign-in when `mfa_channel` is email/sms: `POST /login` → `{requires_mfa, challenge_token}` → `POST /login/verify-pin` → token. Only hashes of the challenge token and PIN are stored (`login_challenges`).
+- Auth refusals throw `App\Exceptions\AuthFlowException` (`message`, `errors[field]`, `error_type`); the FE branches on `error_type`, so don't rename values casually. Every auth outcome goes through `LoginEventLogger` (Settings › Login history shows the workspace's members' events).
+- Business numbers (lockout 5, PIN 5 min / 3 tries, reset link 60 min, invite link 72 h) live in `config/indlela.php`.
+- Permissions are per page: spatie `{action}_{resource}`, actions `view|create|update|delete|approve`, resources catalogued in `App\Support\Permissions` grouped like the sidebar (the SPA's `src/config/modules.ts` mirrors the keys; keep them in step). Every action needs `view` (`Permissions::withView`). `Permissions::ADMIN_ONLY` (users, roles, login history, workspace) is Owner only. The future SEO pages are catalogued already.
+- Authorise the native way: model resources get a Policy (`app/Policies/{Model}Policy.php`) combining the permission, the workspace and client access; controllers call `Gate::authorize('update', $client)`. When a FormRequest's rules query data (a name-taken check), authorise in its `authorize()` so the rules can't leak data (see `ClientRequest`, `SiteRequest`). Pages with no model use `Gate::authorize('view_settings_login_history')`.
+- Settings › Roles saves a role's full permission list (`RoleController@updatePermissions`). Changes apply on the next request. Resource keys travel as values, never object keys (the FE's case transform would rewrite them).
+- User administration goes through `App\Services\Users\UserManagementService`: adding an unknown email creates the account and emails a 72-hour set-password link; an existing account is just added to the workspace. Name, email, mobile, PIN channel and status belong to the account: a workspace changes them only while the account is in no other workspace. Delete = remove from the workspace (the account is soft-deleted when that was its last). It refuses disabling/removing yourself or leaving no active Owner (per-workspace advisory lock); disabling or locking signs the user out at once.
+- Models use the `Auditable` trait; entries carry `workspace_id` (the record's, else the current workspace), and every History drawer reads only its workspace's `audit_logs` through `ChangeHistoryResource`. `User::auditExclude()` keeps secrets and sign-in bookkeeping out; role/client pivot changes are logged explicitly with `logAuditChange`.
+- `active` middleware kills sessions of users locked/disabled after signing in.
+- Transactional email = a case on `App\Mail\EmailTemplateType` + `TemplatedMail`, wording editable per workspace in `email_templates` (code defaults when a workspace has no row). User-level emails (PIN, reset) use the user's current workspace's wording. SMS via `App\Services\Sms\SmsSender` (`SMS_DRIVER=log|twilio`).
+- Files go on the default `s3` disk (the S3-compatible `minio` Sail service locally; real S3 later). Jobs run on Redis under Horizon.
+- Every migration needs a working `down()`. Unique indexes on soft-deleted tables are partial (`WHERE deleted_at IS NULL`) and per workspace.
+- Paginated lists default to **15 per page** (`per_page` 10–100). List pages get `DELETE /x/{id}` and `POST /x/bulk {action, ids}` through the `Controllers\Concerns\SettingsList` trait (`sortList`, `bulkActive` with a 409 hook for rows in use, `historyOf`), changing each row through its model so every change is audited.
+
+## Commands
+
+```bash
+./vendor/bin/sail up -d                                   # pgsql, redis, mailpit, minio (RustFS), app on APP_PORT
+./vendor/bin/sail artisan migrate --seed                  # catalogue, first Owner + workspace (SEED_* in .env)
+./vendor/bin/sail artisan storage:bucket                  # once: create the AWS_BUCKET bucket
+./vendor/bin/sail artisan horizon                         # queue worker; dashboard http://localhost:8000/horizon
+./vendor/bin/sail artisan test                            # phpunit against Postgres indlela_testing
+./vendor/bin/sail bin pint                                # code style
+```
+
+Without Docker for PHP (local PHP 8.3+ with pdo_pgsql, Sail's pgsql still running): `DB_HOST=127.0.0.1 DB_PORT=5433 php artisan test` (the port is FORWARD_DB_PORT). `tests/TestCase.php` refuses to run against anything that isn't a local test database. Run the tests before claiming done.
+
+## Conventions
+
+Commits imperative, ≤ 72 chars, Conventional-Commit prefix, body says why. One concern per PR, ~15 files max; body sections `## Summary`, `## Decisions baked in`, `## Files`, `## What is NOT in this PR`, `## Test plan`.
