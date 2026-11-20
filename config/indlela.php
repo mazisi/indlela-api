@@ -91,4 +91,72 @@ return [
         ],
     ],
 
+    /*
+    | Site audit (crawler, issues, PageSpeed Insights). Thresholds are the
+    | product's definitions of each issue (App\Support\AuditIssues explains
+    | them to users); the crawler numbers keep crawls polite and bounded.
+    */
+    'audit' => [
+        // Crawls and PageSpeed runs go on the long-job connection (Horizon's supervisor-long).
+        'queue_connection' => env('AUDIT_QUEUE_CONNECTION', 'redis-long'),
+        // Sent as "IndlelaBot/1.0 (+APP_URL)"; robots.txt groups for IndlelaBot (else *) apply.
+        'user_agent' => 'IndlelaBot/1.0',
+        'robots_agent' => 'indlelabot',
+        // Requests in flight at once, per-request timeout (s) and the pause between batches (ms).
+        'concurrency' => (int) env('AUDIT_CONCURRENCY', 4),
+        'timeout' => (int) env('AUDIT_TIMEOUT', 10),
+        'delay_ms' => (int) env('AUDIT_DELAY_MS', 250),
+        // Clicks from the home page; pages deeper than this are not crawled.
+        'max_depth' => 10,
+        // Pages per crawl: the site's audit_page_limit (default below), never above the hard max.
+        'default_page_limit' => 500,
+        'max_page_limit' => 5000,
+        // Redirect hops followed (and recorded) per URL before calling it a loop.
+        'max_redirects' => 10,
+        // HTML bodies above this are not parsed (and declared-larger downloads are cut short).
+        'max_body_bytes' => 5 * 1024 * 1024,
+        // pages_crawled is written every this many pages, for the UI's progress bar.
+        'progress_every' => 10,
+        // Sitemaps: files read (indexes followed) and URLs taken from them.
+        'max_sitemaps' => 50,
+        'max_sitemap_urls' => 10000,
+        // Status checks after the crawl (HEAD, GET when HEAD fails): distinct external links and internal images.
+        'external_check_limit' => (int) env('AUDIT_EXTERNAL_CHECK_LIMIT', 200),
+        'image_check_limit' => 300,
+        // Audits kept with their pages, links and issues per site (older ones keep only their summary).
+        'keep_audits' => 10,
+        // Scheduled audits: due this many days after the site's last finished audit.
+        'schedule_days' => ['weekly' => 7, 'monthly' => 30],
+
+        'thresholds' => [
+            'title_max' => 60,
+            'title_min' => 30,
+            'meta_description_max' => 160,
+            'slow_response_ms' => 2000,
+            'thin_content_words' => 200,
+            // redirect_chain: this many redirects or more before the final page.
+            'redirect_chain_hops' => 2,
+        ],
+
+        // Health score = 100 − page deductions − site-wide deductions, clamped 0–100 (docs/API.md).
+        'health' => [
+            // Share of crawled pages with at least one issue of the severity, times this weight.
+            'page_weights' => ['critical' => 50, 'warning' => 30, 'notice' => 10],
+            // Fixed points per site-wide issue (AuditIssues marks which are site-wide).
+            'site_points' => ['critical' => 25, 'warning' => 5, 'notice' => 2],
+        ],
+
+        // Core Web Vitals through PageSpeed Insights (key optional: config/services.php pagespeed.key).
+        'vitals' => [
+            // The home page plus this many of the most-linked indexable pages.
+            'pages' => 4,
+            'strategies' => ['mobile', 'desktop'],
+            'timeout' => 90,
+            'concurrency' => 4,
+            // Lighthouse performance score (0–100): below poor = poor, below good = needs improvement.
+            'poor_score' => 50,
+            'good_score' => 90,
+        ],
+    ],
+
 ];

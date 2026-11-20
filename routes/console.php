@@ -1,8 +1,13 @@
 <?php
 
+use App\Exceptions\SiteAuditException;
 use App\Jobs\SyncSearchConsole;
 use App\Models\GoogleConnection;
 use App\Models\Site;
+use App\Models\SiteAudit;
+use App\Models\Workspace;
+use App\Services\SiteAudit\SiteAudits;
+use App\Support\CurrentWorkspace;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -50,3 +55,29 @@ Artisan::command('search-console:sync {--site=* : Only these site ids}', functio
 
 // GSC publishes a day's data 2-3 days late; early morning SA time is quiet for Google's quota too.
 Schedule::command('search-console:sync')->dailyAt('05:30')->withoutOverlapping()->onOneServer();
+
+// Queues the scheduled site audits that are due (weekly: 7 days after the
+// site's last finished audit, monthly: 30), then prunes old audits' detail
+// rows (the latest 10 per site keep theirs). Spans workspaces on purpose;
+// each audit is created inside its site's workspace and its job carries it.
+Artisan::command('site-audit:run-scheduled', function (SiteAudits $audits, CurrentWorkspace $current) {
+    $queued = 0;
+    foreach ($audits->dueSites() as $site) {
+        $workspace = Workspace::find($site->workspace_id);
+        if (! $workspace) {
+            continue;
+        }
+        try {
+            $current->using($workspace, fn () => $audits->start($site, null, SiteAudit::SCHEDULED));
+            $queued++;
+        } catch (SiteAuditException) {
+            // Started by someone in the meantime.
+        }
+    }
+
+    $pruned = $audits->prune();
+    $this->info("Queued {$queued} scheduled audit(s); pruned {$pruned} old audit(s).");
+})->purpose('Queue due scheduled site audits and prune old audit details');
+
+// Night-time SA: quiet for the clients' servers.
+Schedule::command('site-audit:run-scheduled')->dailyAt('02:00')->withoutOverlapping()->onOneServer();

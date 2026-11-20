@@ -89,6 +89,30 @@ php artisan db:seed --class=GscDemoSeeder
 
 Adds the client "Demo Client" and the site `demo.indlela.local` to the first workspace (if missing) and fills it with ~16 months of generated Search Console data (~150 queries on 30 pages, ~90k rows) so every report has rows. Re-running replaces only that site's data. It is not part of `db:seed`.
 
+## Site audit
+
+Crawls a site (raw HTML, no JavaScript; robots.txt honoured as `IndlelaBot`), lists issues by severity with a plain-English fix for each, scores the site 0–100, compares with the previous audit and measures Core Web Vitals with Google PageSpeed Insights. Rules, thresholds and the issue catalogue: `docs/API.md` › Site audit; numbers in `config/indlela.php` under `audit`.
+
+- **Horizon must be running**: audits are queued jobs on the `redis-long` connection (`supervisor-long`). "Run audit" in the app or `POST /api/sites/{id}/audits`.
+- **Schedule**: set a site to weekly or monthly in the app; `site-audit:run-scheduled` (daily 02:00; run the scheduler locally with `php artisan schedule:work`) queues the due ones and prunes old audits (the latest 10 per site keep their details).
+- **Politeness**: `AUDIT_CONCURRENCY` (4), `AUDIT_TIMEOUT` (10 s), `AUDIT_DELAY_MS` (250) in `.env`. Page limit per site (default 500, max 5000).
+
+### PageSpeed Insights key (optional, recommended)
+
+Without a key Google's shared quota applies and vitals often come back "unavailable" (the audit itself still finishes).
+
+1. In the same Google Cloud project as Search Console: APIs & Services › Library › enable **PageSpeed Insights API**.
+2. APIs & Services › Credentials › Create credentials › **API key**; restrict it to the PageSpeed Insights API.
+3. Put it in `.env` as `PAGESPEED_API_KEY`.
+
+### Demo audits (no crawling)
+
+```bash
+php artisan db:seed --class=AuditDemoSeeder
+```
+
+Builds two finished audits (two weeks ago and yesterday) for `demo.indlela.local` in the first workspace (creating the site if `GscDemoSeeder` hasn't), with issues of every severity, a comparison and vitals. Re-running replaces only that site's audits. Not part of `db:seed`.
+
 ## Tests
 
 ```bash
