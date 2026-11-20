@@ -28,6 +28,9 @@ class AuditLog extends Model
         'ip_address',
         'user_agent',
         'device_browser',
+        'undone_at',
+        'undone_by',
+        'undo_of',
     ];
 
     protected $casts = [
@@ -35,6 +38,7 @@ class AuditLog extends Model
         'old_values' => 'array',
         'new_values' => 'array',
         'timestamp' => 'datetime',
+        'undone_at' => 'datetime',
     ];
 
     public function workspace(): BelongsTo
@@ -45,6 +49,12 @@ class AuditLog extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    /** Who undid this entry (Settings › Change history). */
+    public function undoneBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'undone_by');
     }
 
     public function scopeForWorkspace(Builder $query, ?int $workspaceId): Builder

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use App\Traits\BelongsToWorkspace;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  */
 class GoogleConnection extends Model
 {
-    use BelongsToWorkspace;
+    use Auditable, BelongsToWorkspace;
 
     public const ACTIVE = 'active';
 
@@ -26,6 +27,17 @@ class GoogleConnection extends Model
     ];
 
     protected $hidden = ['access_token', 'refresh_token'];
+
+    /** History: connected, its status, disconnected. Never the tokens, nor their routine refresh. */
+    protected function auditExclude(): array
+    {
+        return ['access_token', 'refresh_token', 'token_expires_at'];
+    }
+
+    protected function transformAttributesForAudit(array $attributes): array
+    {
+        return $attributes + ['_label' => $attributes['google_email'] ?? null];
+    }
 
     protected function casts(): array
     {

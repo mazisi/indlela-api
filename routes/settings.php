@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Settings\ChangeHistoryController;
 use App\Http\Controllers\Settings\EmailTemplateController;
 use App\Http\Controllers\Settings\RoleController;
 use Illuminate\Support\Facades\Route;
@@ -13,6 +14,12 @@ Route::middleware(['auth:sanctum', 'active', 'workspace'])->group(function () {
         Route::put('/roles/{role}', [RoleController::class, 'update'])->whereNumber('role');
         Route::put('/roles/{role}/permissions', [RoleController::class, 'updatePermissions'])->whereNumber('role');
         Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->whereNumber('role');
+
+        // Change history: every audited change (view_settings_change_history + each page's view
+        // permission); Undo needs update_settings_change_history and the right to make the change there.
+        Route::get('/change-history', [ChangeHistoryController::class, 'index']);
+        Route::get('/change-history/options', [ChangeHistoryController::class, 'options']);
+        Route::post('/change-history/{entry}/undo', [ChangeHistoryController::class, 'undo'])->whereNumber('entry')->middleware('throttle:30,1');
     });
 
     // Email templates (*_settings_email_templates): the code-owned email types' wording, per workspace.
