@@ -2,6 +2,8 @@
 
 namespace App\Services\Platform;
 
+use App\Models\MapGridPoint;
+use App\Models\MapGridSearch;
 use App\Models\RankCheck;
 use App\Models\RankKeyword;
 use App\Models\Role;
@@ -22,7 +24,7 @@ use Throwable;
 
 /**
  * Platform › Usage (Indlela staff, platform workspace only): the company's
- * DataForSEO spend and every workspace's rank-tracking usage.
+ * DataForSEO spend and every workspace's rank-tracking and local grid usage.
  *
  * The ONLY place that reads across workspaces on purpose: every tenant
  * query here drops the workspace scope explicitly
@@ -32,7 +34,8 @@ use Throwable;
  * RankSpend. Cost = Σ rank_checks.cost (what DataForSEO charged); a check
  * = a check posted to DataForSEO (`posted_at` set: skipped ones aren't);
  * live checks = Σ `live_requests` ("check now" requests, billed even when
- * they fail).
+ * they fail). Local grid spend (points by their scan's `scanned_on`,
+ * business searches by `searched_on`) is added to every cost.
  */
 class PlatformUsage
 {
@@ -65,6 +68,11 @@ class PlatformUsage
                 .' COUNT(*) FILTER (WHERE posted_at IS NOT NULL) AS checks, COALESCE(SUM(live_requests), 0) AS live_checks')
             ->get()->keyBy('month');
         $current = $monthly->get($this->month(0)->format('Y-m'));
+        $gridMonthly = $this->gridSpend()
+            ->where('day', '>=', $this->month(-(self::SERIES_MONTHS - 1))->toDateString())
+            ->groupByRaw("to_char(day, 'YYYY-MM')")
+            ->selectRaw("to_char(day, 'YYYY-MM') AS month, COALESCE(SUM(cost), 0) AS cost, COALESCE(SUM(points), 0) AS points")
+            ->get()->keyBy('month');
 
         $keywords = $this->activeKeywords()
             ->selectRaw('COUNT(*) AS keywords, COUNT(DISTINCT rank_keywords.workspace_id) AS workspaces')
@@ -93,10 +101,11 @@ class PlatformUsage
                 'keywords_tracked' => (int) $keywords->keywords,
                 'checks_this_month' => (int) ($current->checks ?? 0),
                 'live_checks_this_month' => (int) ($current->live_checks ?? 0),
+                'grid_points_this_month' => (int) ($gridMonthly->get($this->month(0)->format('Y-m'))->points ?? 0),
             ],
             'series' => $this->months()->map(fn (string $month) => [
                 'month' => $month,
-                'cost' => self::usd((float) ($monthly->get($month)->cost ?? 0)),
+                'cost' => self::usd((float) ($monthly->get($month)->cost ?? 0) + (float) ($gridMonthly->get($month)->cost ?? 0)),
                 'checks' => (int) ($monthly->get($month)->checks ?? 0),
             ])->all(),
         ];
@@ -154,14 +163,26 @@ class PlatformUsage
         $sites = Site::query()->withoutGlobalScope('workspace')->toBase()
             ->groupBy('workspace_id')->selectRaw('workspace_id, COUNT(*) AS sites_count');
 
+        $grid = $this->gridSpend()
+            ->where('day', '>=', $lastMonth)
+            ->groupBy('workspace_id')
+            ->selectRaw('workspace_id,'
+                .' COALESCE(SUM(cost) FILTER (WHERE day >= ?), 0) AS cost_this_month,'
+                .' COALESCE(SUM(cost) FILTER (WHERE day < ?), 0) AS cost_last_month,'
+                .' COALESCE(SUM(points) FILTER (WHERE day >= ?), 0) AS points_this_month',
+                [$thisMonth, $thisMonth, $thisMonth]);
+
         return Workspace::query()
             ->leftJoinSub($checks, 'c', 'c.workspace_id', '=', 'workspaces.id')
             ->leftJoinSub($keywords, 'k', 'k.workspace_id', '=', 'workspaces.id')
             ->leftJoinSub($sites, 's', 's.workspace_id', '=', 'workspaces.id')
+            ->leftJoinSub($grid, 'g', 'g.workspace_id', '=', 'workspaces.id')
             ->select('workspaces.*')
             ->selectRaw('COALESCE(k.keywords_tracked, 0) AS keywords_tracked, COALESCE(s.sites_count, 0) AS sites_count,'
                 .' COALESCE(c.checks_this_month, 0) AS checks_this_month, COALESCE(c.live_checks_this_month, 0) AS live_checks_this_month,'
-                .' COALESCE(c.cost_this_month, 0) AS cost_this_month, COALESCE(c.cost_last_month, 0) AS cost_last_month,'
+                .' COALESCE(c.cost_this_month, 0) + COALESCE(g.cost_this_month, 0) AS cost_this_month,'
+                .' COALESCE(c.cost_last_month, 0) + COALESCE(g.cost_last_month, 0) AS cost_last_month,'
+                .' COALESCE(g.points_this_month, 0) AS grid_points_this_month,'
                 ." (SELECT MAX(rc.completed_at) FROM rank_checks rc WHERE rc.workspace_id = workspaces.id AND rc.status = 'done') AS last_check_at");
     }
 
@@ -202,12 +223,19 @@ class PlatformUsage
             ->groupBy('workspace_id')->groupByRaw("to_char(checked_on, 'YYYY-MM')")
             ->selectRaw("workspace_id, to_char(checked_on, 'YYYY-MM') AS month, COALESCE(SUM(cost), 0) AS cost")
             ->get()->groupBy('workspace_id')->map(fn (Collection $rows) => $rows->pluck('cost', 'month'));
+        $gridSeries = $this->gridSpend()
+            ->whereIn('workspace_id', $ids)
+            ->where('day', '>=', $this->month(-(self::SERIES_MONTHS - 1))->toDateString())
+            ->groupBy('workspace_id')->groupByRaw("to_char(day, 'YYYY-MM')")
+            ->selectRaw("workspace_id, to_char(day, 'YYYY-MM') AS month, COALESCE(SUM(cost), 0) AS cost")
+            ->get()->groupBy('workspace_id')->map(fn (Collection $rows) => $rows->pluck('cost', 'month'));
         $months = $this->months();
         $default = (int) config('indlela.rank_tracking.workspace_keyword_limit');
 
-        return $workspaces->map(function (Workspace $w) use ($owners, $series, $months, $default) {
+        return $workspaces->map(function (Workspace $w) use ($owners, $series, $gridSeries, $months, $default) {
             $owner = $owners->get($w->id);
             $costs = $series->get($w->id, collect());
+            $gridCosts = $gridSeries->get($w->id, collect());
 
             return [
                 'id' => $w->id,
@@ -221,10 +249,11 @@ class PlatformUsage
                 'sites_count' => (int) $w->sites_count,
                 'checks_this_month' => (int) $w->checks_this_month,
                 'live_checks_this_month' => (int) $w->live_checks_this_month,
+                'grid_points_this_month' => (int) $w->grid_points_this_month,
                 'cost_this_month' => self::usd((float) $w->cost_this_month),
                 'cost_last_month' => self::usd((float) $w->cost_last_month),
                 'last_check_at' => $w->last_check_at ? Carbon::parse($w->last_check_at)->toIso8601String() : null,
-                'series' => $months->map(fn (string $month) => ['month' => $month, 'cost' => self::usd((float) ($costs->get($month) ?? 0))])->all(),
+                'series' => $months->map(fn (string $month) => ['month' => $month, 'cost' => self::usd((float) ($costs->get($month) ?? 0) + (float) ($gridCosts->get($month) ?? 0))])->all(),
             ];
         })->values();
     }
@@ -245,6 +274,24 @@ class PlatformUsage
     private function checks(): QueryBuilder
     {
         return RankCheck::query()->withoutGlobalScope('workspace')->toBase();
+    }
+
+    /**
+     * Local grid spend of every workspace by day: points (by the day their
+     * scan started; `points` = points checked) and business searches,
+     * as rows {workspace_id, day, cost, points} to group further.
+     */
+    private function gridSpend(): QueryBuilder
+    {
+        $points = MapGridPoint::query()->toBase()
+            ->join('map_grid_scans', 'map_grid_scans.id', '=', 'map_grid_points.scan_id')
+            ->groupBy('map_grid_scans.workspace_id', 'map_grid_scans.scanned_on')
+            ->selectRaw("map_grid_scans.workspace_id, map_grid_scans.scanned_on AS day, SUM(map_grid_points.cost) AS cost, COUNT(*) FILTER (WHERE map_grid_points.status <> 'pending') AS points");
+        $searches = MapGridSearch::query()->withoutGlobalScope('workspace')->toBase()
+            ->groupBy('workspace_id', 'searched_on')
+            ->selectRaw('workspace_id, searched_on AS day, SUM(cost) AS cost, 0 AS points');
+
+        return DB::query()->fromSub($points->unionAll($searches), 'grid_spend');
     }
 
     /** Active keywords of workspaces that aren't deleted, across the platform. */

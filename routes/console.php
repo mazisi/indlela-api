@@ -7,6 +7,7 @@ use App\Models\GoogleConnection;
 use App\Models\Site;
 use App\Models\SiteAudit;
 use App\Models\Workspace;
+use App\Services\LocalGrid\GridScanner;
 use App\Services\RankTracking\RankChecker;
 use App\Services\RankTracking\RankLocations;
 use App\Services\RankTracking\RankSpend;
@@ -145,6 +146,24 @@ Artisan::command('rank-tracking:locations {--if-stale}', function (RankLocations
 })->purpose('Refresh the DataForSEO location list');
 
 Schedule::command('rank-tracking:locations --if-stale')->weeklyOn(0, '03:00')->withoutOverlapping()->onOneServer();
+
+// Local grid: fails scans stuck past local_grid.stale_hours, then queues a
+// scheduled scan of every active weekly/monthly grid that is due today
+// (weekly: 7 days after its last finished scan; monthly: the same day a
+// month later; never scanned: now). Spans workspaces; each scan is started
+// in its grid's workspace and its job carries it. A scan that doesn't fit
+// under the platform's spend cap (or with no credentials) is skipped and
+// tried again on the next run.
+Artisan::command('local-grid:run-scheduled', function (GridScanner $scanner, CurrentWorkspace $current) {
+    $stale = $scanner->failStale();
+    ['queued' => $queued, 'skipped' => $skipped] = $scanner->scheduleDue(today(), $current);
+    if ($skipped > 0) {
+        Log::warning('Local grid: scheduled scans skipped (not configured, or the monthly spend cap is reached).', ['skipped' => $skipped]);
+    }
+    $this->info("Queued {$queued} scheduled grid scan(s); skipped {$skipped}; {$stale} stale scan(s) failed.");
+})->purpose('Queue the local grid scans due today');
+
+Schedule::command('local-grid:run-scheduled')->dailyAt('03:30')->timezone('Africa/Johannesburg')->withoutOverlapping()->onOneServer();
 
 // Monthly client reports: for each active schedule whose day of the month is
 // today and that hasn't run this month, the previous calendar month's report,

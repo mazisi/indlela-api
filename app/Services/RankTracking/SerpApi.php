@@ -44,6 +44,16 @@ interface SerpApi
     public function live(array $task): array;
 
     /**
+     * Live Google Maps SERPs (local grid points, business searches), sent
+     * at once. Never throws for one task: a request that failed comes back
+     * as status_code 0 with the reason in status_message.
+     *
+     * @param  array<array-key, array<string, mixed>>  $tasks  live/advanced bodies, keyed as the caller likes
+     * @return array<array-key, array{id: ?string, status_code: int, status_message: string, cost: float, result: ?array<string, mixed>}> same keys
+     */
+    public function mapsLive(array $tasks): array;
+
+    /**
      * Every Google location: [{location_code, location_name, location_code_parent, country_iso_code, location_type}].
      *
      * @return list<array<string, mixed>>

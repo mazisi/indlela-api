@@ -2,13 +2,17 @@
 
 namespace App\Services\RankTracking;
 
+use App\Models\MapGridPoint;
+use App\Models\MapGridScan;
+use App\Models\MapGridSearch;
 use App\Models\RankCheck;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 /**
  * The platform's DataForSEO spend this calendar month, across every
- * workspace, against rank_tracking.monthly_spend_cap_usd. Platform-only:
+ * workspace and both products (rank tracking, local grid), against
+ * rank_tracking.monthly_spend_cap_usd. Platform-only:
  * never shown to a workspace (they only see `paused`).
  *
  * Spend = what DataForSEO charged (rank_checks.cost) plus the expected price
@@ -45,18 +49,23 @@ class RankSpend
     }
 
     /**
-     * This month's spend in its two parts: what DataForSEO charged
-     * (Σ rank_checks.cost) and the expected price of checks posted and not
-     * answered yet. Platform › Usage shows both.
+     * This month's spend in its two parts: what DataForSEO charged and the
+     * expected price of calls made and not answered yet. Rank checks
+     * (Σ rank_checks.cost; live checks pending, standard ones claimed and not
+     * accepted) and the local grid (Σ map_grid_points.cost of scans started
+     * this month and Σ map_grid_searches.cost; points of scans in progress
+     * not done yet, searches still running). Platform › Usage shows both.
      *
      * @return array{charged: float, pending: float}
      */
     public function breakdown(): array
     {
         $prices = config('indlela.rank_tracking');
+        $gridPrice = (float) config('indlela.local_grid.price_live');
+        $month = today()->startOfMonth()->toDateString();
 
         $row = RankCheck::query()->withoutGlobalScope('workspace')
-            ->where('checked_on', '>=', today()->startOfMonth()->toDateString())
+            ->where('checked_on', '>=', $month)
             ->selectRaw(
                 'COALESCE(SUM(cost), 0) AS charged,'
                 ." CAST(? AS numeric) * COUNT(*) FILTER (WHERE status = 'pending' AND posted_at IS NOT NULL AND mode = 'live')"
@@ -65,7 +74,29 @@ class RankSpend
             )
             ->toBase()->first();
 
-        return ['charged' => round((float) $row->charged, 6), 'pending' => round((float) $row->pending, 6)];
+        $points = MapGridPoint::query()
+            ->join('map_grid_scans', 'map_grid_scans.id', '=', 'map_grid_points.scan_id')
+            ->where(fn ($q) => $q->where('map_grid_scans.scanned_on', '>=', $month)->orWhereIn('map_grid_scans.status', MapGridScan::IN_PROGRESS))
+            ->selectRaw(
+                'COALESCE(SUM(map_grid_points.cost) FILTER (WHERE map_grid_scans.scanned_on >= ?), 0) AS charged,'
+                ." CAST(? AS numeric) * COUNT(*) FILTER (WHERE map_grid_points.status = 'pending' AND map_grid_scans.status IN ('queued', 'running')) AS pending",
+                [$month, $gridPrice],
+            )
+            ->toBase()->first();
+
+        $searches = MapGridSearch::query()->withoutGlobalScope('workspace')
+            ->where('searched_on', '>=', $month)
+            ->selectRaw(
+                'COALESCE(SUM(cost), 0) AS charged,'
+                ." CAST(? AS numeric) * COUNT(*) FILTER (WHERE status = 'pending' AND created_at > ?) AS pending",
+                [$gridPrice, now()->subMinutes(10)],
+            )
+            ->toBase()->first();
+
+        return [
+            'charged' => round((float) $row->charged + (float) $points->charged + (float) $searches->charged, 6),
+            'pending' => round((float) $row->pending + (float) $points->pending + (float) $searches->pending, 6),
+        ];
     }
 
     /** Whether the cap is reached (cached spend): workspaces see rank checks as paused. */

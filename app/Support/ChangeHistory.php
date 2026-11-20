@@ -5,6 +5,7 @@ namespace App\Support;
 use App\Models\Client;
 use App\Models\EmailTemplate;
 use App\Models\GoogleConnection;
+use App\Models\MapGrid;
 use App\Models\RankKeyword;
 use App\Models\Report;
 use App\Models\ReportSchedule;
@@ -46,6 +47,12 @@ final class ChangeHistory
             'keyword' => 'Keyword', 'location_name' => 'Location', 'language_code' => 'Language', 'device' => 'Device',
             'frequency' => 'Frequency', 'weekly_day' => 'Weekly check day', 'tags' => 'Tags', ...self::ACTIVE,
         ], ['locked' => [], 'restore' => true]],
+        'map_grids' => [MapGrid::class, 'Local grid', 'local_grid', [
+            'keyword' => 'Keyword', 'business_title' => 'Business', 'business_address' => 'Business address',
+            'business_place_id' => 'Google place id', 'business_cid' => 'Google CID',
+            'center_lat' => 'Centre latitude', 'center_lng' => 'Centre longitude', 'size' => 'Grid size', 'spacing_km' => 'Spacing (km)',
+            'device' => 'Device', 'schedule' => 'Schedule', ...self::ACTIVE,
+        ], ['locked' => ['business_place_id', 'business_cid'], 'restore' => true]],
         'reports' => [Report::class, 'Report', 'reports', [
             'title' => 'Title', 'period_start' => 'From', 'period_end' => 'To', 'compare' => 'Compared with', 'sections' => 'Sections',
             'note' => 'Note', 'trigger' => 'Made by', 'sent_to' => 'Sent to', 'sent_at' => 'Sent', 'shared' => 'Shared', 'share_expires_at' => 'Link expires',

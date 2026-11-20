@@ -215,6 +215,38 @@ return [
     ],
 
     /*
+    | Local map pack grid: Google Maps rankings from a grid of points around a
+    | centre (DataForSEO Maps SERP, Live mode). Company-paid like rank
+    | tracking: its spend counts toward rank_tracking.monthly_spend_cap_usd.
+    */
+    'local_grid' => [
+        // Live Maps SERP, per point and per business search (DataForSEO's returned cost is stored).
+        'price_live' => (float) env('LOCAL_GRID_PRICE_LIVE', 0.002),
+        // Map results asked for per point: a business beyond it is "not in the top 20".
+        'depth' => 20,
+        // Google Maps zoom of each point's search ("lat,lng,15z").
+        'zoom' => 15,
+        // Beta limits (per workspace): active grids, manual "scan now" and business searches a
+        // calendar day (SAST); failed scans and searches count too (they're billed).
+        'max_grids_per_workspace' => (int) env('LOCAL_GRID_MAX_GRIDS', 10),
+        'scan_now_daily_limit' => (int) env('LOCAL_GRID_SCAN_NOW_DAILY_LIMIT', 10),
+        'business_search_daily_limit' => (int) env('LOCAL_GRID_SEARCH_DAILY_LIMIT', 30),
+        // Candidates a business search returns; it searches South Africa unless given a point.
+        'search_results' => 10,
+        'search_location_code' => 2710,
+        'language_code' => 'en',
+        // Points asked for at once (one job runs one round; each live call may take up to live_timeout s).
+        'concurrency' => 7,
+        'live_timeout' => 75,
+        // Scans still queued or running after this many hours are failed (their points stop counting as pending spend).
+        'stale_hours' => 3,
+        // Scans listed on a grid's page, newest first.
+        'scans_listed' => 20,
+        // Points are small jobs: the default redis connection (Horizon's supervisor-1).
+        'queue_connection' => env('LOCAL_GRID_QUEUE_CONNECTION', 'redis'),
+    ],
+
+    /*
     | White-label reports: PDF (dompdf), share links and the monthly email.
     */
     'reports' => [

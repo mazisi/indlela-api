@@ -59,6 +59,9 @@ final class Permissions
         'site_audit' => ['Site audit', ['site_audit' => ['Site audit', self::CRUD]]],
         // MVP 1: DataForSEO. Update = add, change or remove keywords and "check now" (Live mode, costs more); create/delete unused so far.
         'rank_tracking' => ['Rank tracking', ['rank_tracking' => ['Rank tracking', self::CRUD]]],
+        // Local map pack grid (DataForSEO Maps). Create = add a grid and search for its business; update = change,
+        // pause and "scan now"; delete = delete a grid.
+        'local_grid' => ['Local grid', ['local_grid' => ['Local grid', self::CRUD]]],
         // MVP 4: white-label reports. Create = generate, send, share links, monthly schedule; delete = delete a report.
         'reports' => ['Reports', ['reports' => ['Reports', ['view', 'create', 'delete']]]],
         'settings' => ['Settings', [

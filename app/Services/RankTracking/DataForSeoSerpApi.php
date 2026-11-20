@@ -5,6 +5,7 @@ namespace App\Services\RankTracking;
 use App\Exceptions\DataForSeoException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
+use Illuminate\Http\Client\Pool;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -23,6 +24,8 @@ use Throwable;
 class DataForSeoSerpApi implements SerpApi
 {
     private const ORGANIC = '/v3/serp/google/organic';
+
+    private const MAPS = '/v3/serp/google/maps';
 
     public function configured(): bool
     {
@@ -70,6 +73,38 @@ class DataForSeoSerpApi implements SerpApi
         // A live SERP takes seconds, up to DataForSEO's own 120 s limit.
         // A live check that timed out may still be billed: never sent twice.
         return $this->firstTask($this->call('post', self::ORGANIC.'/live/advanced', [$task], 'the live check', (int) config('indlela.rank_tracking.live_timeout'), retryTimeouts: false));
+    }
+
+    /**
+     * Each task its own request, all at once (Http::pool). Not retried: a
+     * live call is billed even when it times out.
+     */
+    public function mapsLive(array $tasks): array
+    {
+        if ($tasks === []) {
+            return [];
+        }
+        $timeout = (int) config('indlela.local_grid.live_timeout');
+        $responses = Http::pool(function (Pool $pool) use ($tasks, $timeout) {
+            foreach ($tasks as $key => $task) {
+                $this->configure($pool->as((string) $key), $timeout)->post(self::MAPS.'/live/advanced', [$task]);
+            }
+        });
+
+        $out = [];
+        foreach (array_keys($tasks) as $key) {
+            $response = $responses[(string) $key] ?? null;
+            try {
+                if (! $response instanceof Response) {
+                    throw new DataForSeoException('DataForSEO did not answer for a map check'.($response instanceof Throwable ? ": {$response->getMessage()}" : '.'));
+                }
+                $out[$key] = $this->firstTask($this->envelope($response, 'a map check'));
+            } catch (DataForSeoException $e) {
+                $out[$key] = ['id' => null, 'status_code' => 0, 'status_message' => $e->getMessage(), 'cost' => 0.0, 'result' => null];
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -144,12 +179,18 @@ class DataForSeoSerpApi implements SerpApi
 
     private function http(int $timeout, bool $retryTimeouts, bool $live = false): PendingRequest
     {
-        $base = $live ? config('services.dataforseo.live_url') : config('services.dataforseo.base_url');
-
-        return Http::baseUrl(rtrim((string) $base, '/'))
-            ->withBasicAuth((string) config('services.dataforseo.login'), (string) config('services.dataforseo.password'))
-            ->acceptJson()->asJson()->timeout($timeout)
+        return $this->configure(Http::createPendingRequest(), $timeout, $live)
             ->retry(3, 2000, fn (Throwable $e) => ($retryTimeouts && $e instanceof ConnectionException)
                 || ($e instanceof RequestException && in_array($e->response->status(), [429, 500, 502, 503, 504], true)), throw: false);
+    }
+
+    /** Host, Basic auth, JSON and timeout on a request. */
+    private function configure(PendingRequest $request, int $timeout, bool $live = false): PendingRequest
+    {
+        $base = $live ? config('services.dataforseo.live_url') : config('services.dataforseo.base_url');
+
+        return $request->baseUrl(rtrim((string) $base, '/'))
+            ->withBasicAuth((string) config('services.dataforseo.login'), (string) config('services.dataforseo.password'))
+            ->acceptJson()->asJson()->timeout($timeout);
     }
 }

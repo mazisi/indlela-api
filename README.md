@@ -1,6 +1,6 @@
 # indlela-api
 
-The Laravel 13 API behind **Indlela**, an SEO tool for agencies and SMEs: Search Console dashboard and quick wins, site audit, rank tracking and white-label reports. Multi-tenant: every agency or business is a **workspace** with its own clients, sites, users and roles. The web app is the separate repo [`indlela`](../indlela).
+The Laravel 13 API behind **Indlela**, an SEO tool for agencies and SMEs: Search Console dashboard and quick wins, site audit, rank tracking, local map pack grid and white-label reports. Multi-tenant: every agency or business is a **workspace** with its own clients, sites, users and roles. The web app is the separate repo [`indlela`](../indlela).
 
 Routes and permissions: [`docs/API.md`](docs/API.md). Architecture rules for contributors (and Claude Code): [`CLAUDE.md`](CLAUDE.md).
 
@@ -161,6 +161,20 @@ php artisan db:seed --class=RankDemoSeeder
 
 Adds 60 keywords (10 phrases × South Africa, Johannesburg and a Sandton coordinate × desktop and mobile) with 90 days of results to `demo.indlela.local` in the first workspace: trends, this week's gains and drops, keywords outside the top 100, URL switches (cannibalisation) and SERP features. Re-running replaces only that site's keywords. Not part of `db:seed`. The demo keywords are active, so once DataForSEO is configured the nightly job checks them too.
 
+## Local map pack grid
+
+Checks where a business shows in Google's map results from a grid of points across an area (3 × 3, 5 × 5 or 7 × 7, 0.5–5 km apart, e.g. 5 × 5 across Sandton) and shows it as a heatmap, with average rank, share of local voice (top-3 %) and the competitors holding the map pack. Each point is one **live** DataForSEO Google Maps SERP on the same platform account as rank tracking (`DATAFORSEO_*`; the sandbox answers with sample data). Endpoints, matching and metrics: `docs/API.md` › Local grid; numbers in `config/indlela.php` under `local_grid`.
+
+- **Costs** (platform-only): about $0.002 a point, so a 5 × 5 scan ≈ $0.05 and a 7 × 7 ≈ $0.10; a business search (picking the listing) is one call. Grid spend counts toward the same `RANK_MONTHLY_SPEND_CAP_USD`; a scan only starts if all its points fit, otherwise "Local grid scans are paused for now".
+- **Beta limits** (`.env`): `LOCAL_GRID_MAX_GRIDS` (10 active grids per workspace), `LOCAL_GRID_SCAN_NOW_DAILY_LIMIT` (10 manual scans a day), `LOCAL_GRID_SEARCH_DAILY_LIMIT` (30 business searches a day), `LOCAL_GRID_PRICE_LIVE` (0.002, used for the cap's pending figure).
+- **Running it**: scans run on Horizon (default `redis` queue, one job per round of 7 points). `local-grid:run-scheduled` (daily 03:30) queues weekly/monthly grids that are due and fails scans stuck for over 3 hours.
+
+```bash
+php artisan db:seed --class=LocalGridDemoSeeder
+```
+
+Adds one 5 × 5 grid ("seo agency sandton") with two finished scans of made-up results to `demo.indlela.local` in the first workspace. Idempotent and never deletes (a demo grid that already has scans is left alone); not scheduled, so it never costs anything. Not part of `db:seed`.
+
 ## White-label reports
 
 A report is one site's results for a period (Search Console, rank tracking, site audit; any of the three) as a **PDF**, a **share link** (`{FRONTEND_URL}/r/{token}`, no sign-in, optional expiry) and an **email** to the client, with a short plain-language summary at the top ("Search traffic up 14% (5,190 clicks)", "6 keywords entered the top 10", "2 critical issues need attention"). Routes, snapshot shape and summary rules: `docs/API.md` › White-label reports.
@@ -180,7 +194,7 @@ After the three demo seeders above: generates last month's report of `demo.indle
 
 ## Platform usage (Indlela staff)
 
-**Platform › Usage** shows the company's DataForSEO spend (this month, pending, against the cap, the account balance) and every workspace's rank-tracking usage, so staff can set prices and raise a beta tester's keyword limit. Customers never see it: it exists only in one **platform workspace** (endpoints and rules: `docs/API.md` › Platform).
+**Platform › Usage** shows the company's DataForSEO spend (this month, pending, against the cap, the account balance; rank tracking and local grid together) and every workspace's usage, so staff can set prices and raise a beta tester's keyword limit. Customers never see it: it exists only in one **platform workspace** (endpoints and rules: `docs/API.md` › Platform).
 
 To make someone a superuser:
 
