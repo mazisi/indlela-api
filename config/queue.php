@@ -73,6 +73,17 @@ return [
             'after_commit' => false,
         ],
 
+        // Long jobs (a Search Console backfill runs for minutes): retry_after must
+        // outlast the job's timeout, or Redis hands a running job to a second worker.
+        'redis-long' => [
+            'driver' => 'redis',
+            'connection' => env('REDIS_QUEUE_CONNECTION', 'default'),
+            'queue' => 'long',
+            'retry_after' => (int) env('REDIS_LONG_QUEUE_RETRY_AFTER', 1900),
+            'block_for' => null,
+            'after_commit' => false,
+        ],
+
         'deferred' => [
             'driver' => 'deferred',
         ],

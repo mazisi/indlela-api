@@ -11,3 +11,4 @@ require __DIR__.'/workspaces.php';
 require __DIR__.'/users.php';
 require __DIR__.'/settings.php';
 require __DIR__.'/clients.php';
+require __DIR__.'/search_console.php';

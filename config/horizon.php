@@ -210,6 +210,19 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
+        // Search Console syncs (App\Jobs\SyncSearchConsole): long, memory-hungry, few at a time.
+        'supervisor-long' => [
+            'connection' => 'redis-long',
+            'queue' => ['long'],
+            'balance' => 'simple',
+            'maxProcesses' => 2,
+            'maxTime' => 0,
+            'maxJobs' => 0,
+            'memory' => 512,
+            'tries' => 1,
+            'timeout' => 1800,
+            'nice' => 0,
+        ],
     ],
 
     'environments' => [
