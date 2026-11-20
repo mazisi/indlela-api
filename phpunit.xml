@@ -36,6 +36,9 @@
         <env name="SMS_DRIVER" value="log"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="GSC_QUEUE_CONNECTION" value="sync"/>
+        <env name="AUDIT_QUEUE_CONNECTION" value="sync"/>
+        <env name="AUDIT_DELAY_MS" value="0"/>
+        <env name="PAGESPEED_API_KEY" value=""/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

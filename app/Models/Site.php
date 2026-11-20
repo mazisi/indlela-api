@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
@@ -30,8 +32,16 @@ class Site extends Model
 
     public const GSC_FAILED = 'failed';
 
+    public const AUDIT_OFF = 'off';
+
+    public const AUDIT_WEEKLY = 'weekly';
+
+    public const AUDIT_MONTHLY = 'monthly';
+
+    public const AUDIT_SCHEDULES = [self::AUDIT_OFF, self::AUDIT_WEEKLY, self::AUDIT_MONTHLY];
+
     /** The database defaults, so a model just created answers like a loaded one. */
-    protected $attributes = ['is_active' => true, 'gsc_sync_status' => self::GSC_IDLE];
+    protected $attributes = ['is_active' => true, 'gsc_sync_status' => self::GSC_IDLE, 'audit_schedule' => self::AUDIT_OFF, 'audit_page_limit' => 500];
 
     protected $fillable = ['client_id', 'name', 'url', 'domain', 'is_active'];
 
@@ -49,6 +59,7 @@ class Site extends Model
             'is_active' => 'boolean',
             'gsc_synced_at' => 'datetime',
             'gsc_data_through' => 'date',
+            'audit_page_limit' => 'integer',
         ];
     }
 
@@ -83,6 +94,23 @@ class Site extends Model
     public function client(): BelongsTo
     {
         return $this->belongsTo(Client::class);
+    }
+
+    public function audits(): HasMany
+    {
+        return $this->hasMany(SiteAudit::class);
+    }
+
+    /** The latest audit that finished its crawl and analysis (status done). */
+    public function latestAudit(): HasOne
+    {
+        return $this->hasOne(SiteAudit::class)->ofMany(['id' => 'max'], fn (Builder $q) => $q->where('status', SiteAudit::DONE));
+    }
+
+    /** The audit queued or in progress, if any (at most one). */
+    public function runningAudit(): HasOne
+    {
+        return $this->hasOne(SiteAudit::class)->ofMany(['id' => 'max'], fn (Builder $q) => $q->whereIn('status', SiteAudit::RUNNING));
     }
 
     public function scopeActive(Builder $query): Builder

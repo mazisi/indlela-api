@@ -49,7 +49,7 @@ final class Permissions
         ]],
         // MVP 2: Google Search Console. Create = connect a site's property (OAuth), delete = disconnect.
         'search_console' => ['Search Console', ['search_console' => ['Search Console', self::CRUD]]],
-        // MVP 3: crawls and PageSpeed. Create = run a crawl now; update = mark issues fixed / ignored, audit settings.
+        // MVP 3: crawls and PageSpeed. Update = run an audit now, cancel it, audit settings (create/delete unused so far).
         'site_audit' => ['Site audit', ['site_audit' => ['Site audit', self::CRUD]]],
         // MVP 1: DataForSEO. Create = add keywords or "check now" (Live mode, costs more).
         'rank_tracking' => ['Rank tracking', ['rank_tracking' => ['Rank tracking', self::CRUD]]],

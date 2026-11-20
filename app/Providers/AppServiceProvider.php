@@ -6,6 +6,8 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\SearchConsole\GoogleSearchConsoleApi;
 use App\Services\SearchConsole\SearchConsoleApi;
+use App\Services\SiteAudit\HttpPageFetcher;
+use App\Services\SiteAudit\PageFetcher;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SmsSender;
 use App\Services\Sms\TwilioSmsSender;
@@ -26,6 +28,9 @@ class AppServiceProvider extends ServiceProvider
 
         // Search Console over Google's REST API (tests use Http::fake).
         $this->app->bind(SearchConsoleApi::class, GoogleSearchConsoleApi::class);
+
+        // Site audit pages as raw HTML (no JavaScript); a browser renderer can replace it later.
+        $this->app->bind(PageFetcher::class, HttpPageFetcher::class);
 
         $this->app->singleton(SmsSender::class, fn () => match (config('indlela.sms.driver')) {
             'twilio' => TwilioSmsSender::fromConfig(),

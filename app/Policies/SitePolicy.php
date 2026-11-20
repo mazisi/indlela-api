@@ -55,7 +55,19 @@ class SitePolicy
         return $this->allowSite($user, 'update_search_console', $site);
     }
 
-    private function allowSite(User $user, string $permission, Site $site): Response
+    /** Site audit: the site's audits and their results. */
+    public function viewSiteAudit(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'view_site_audit', $site);
+    }
+
+    /** Site audit: run or cancel an audit, change the audit settings. */
+    public function manageSiteAudit(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'update_site_audit', $site);
+    }
+
+    public function allowSite(User $user, string $permission, Site $site): Response
     {
         if (! $this->inCurrentWorkspace($site)) {
             return $user->can($permission)

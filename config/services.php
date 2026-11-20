@@ -49,4 +49,10 @@ return [
         'redirect_uri' => env('GOOGLE_REDIRECT_URI', 'http://localhost:8000/api/google/callback'),
     ],
 
+    // PageSpeed Insights (site audit Core Web Vitals). Optional: without a key Google's
+    // shared quota applies and runs often come back "unavailable".
+    'pagespeed' => [
+        'key' => env('PAGESPEED_API_KEY'),
+    ],
+
 ];

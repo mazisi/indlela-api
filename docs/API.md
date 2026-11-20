@@ -118,6 +118,18 @@ Differences from workforce-api's contract: `workspace` and `workspaces` are new;
 | GET | `/api/sites/{site}/search-console/quick-wins` | `view_search_console` + access | Paginated `data[]` {query, page, impressions, clicks, ctr, position, potential_clicks}. Sort `potential_clicks` (default desc), `impressions`, `clicks`, `ctr`, `position` |
 | GET | `/api/sites/{site}/search-console/low-ctr` | `view_search_console` + access | Paginated `data[]` {page, impressions, clicks, ctr, expected_ctr, position, missed_clicks, top_queries[3]}. Sort `missed_clicks` (default desc), `impressions`, `clicks`, `ctr`, `expected_ctr`, `position` |
 | GET | `/api/sites/{site}/search-console/content-decay` | `view_search_console` + access | Paginated `data[]` {page, clicks_last_28, clicks_prev_28, clicks_change_pct, monthly[{month: YYYY-MM, clicks} x 6], decline_months} + `sync` (no `period`: always as of `gsc_data_through`, start/end ignored). Sort `clicks_lost` (= prev − last; default desc), `clicks_last_28`, `clicks_prev_28`, `clicks_change_pct`, `decline_months` |
+| GET | `/api/site-audit/sites` | `view_site_audit` | Every site the user can access, by client then name (not paginated): `data[]` {id, name, url, client {id, name}, audit_schedule (off/weekly/monthly), audit_page_limit, latest_audit: AuditSummary\|null (latest **done** audit), running_audit: AuditSummary\|null (queued/crawling/analysing)} |
+| PUT | `/api/sites/{site}/audit-settings` | `update_site_audit` + access | `audit_schedule` (off/weekly/monthly), `audit_page_limit` (10–5000) → `data` = the site as in `/site-audit/sites` |
+| GET | `/api/sites/{site}/audits` | `view_site_audit` + access | The site's audits, newest first, paginated AuditSummary (`per_page` 10–100) |
+| POST | `/api/sites/{site}/audits` | `update_site_audit` + access | Queue an audit now: 202 `{data: AuditSummary}` (status `queued`). 409 `{message, error_type: 'audit_running'}` while one is queued/crawling/analysing |
+| GET | `/api/audits/{audit}` | `view_site_audit` + access | `{data: AuditSummary}`; poll it while the audit runs (`pages_crawled` is written every 10 pages) |
+| POST | `/api/audits/{audit}/cancel` | `update_site_audit` + access | Cancel a queued or running audit (the crawler stops after its current batch; pages crawled so far are kept, nothing is analysed) → `{data: AuditSummary}` status `cancelled`. 409 `audit_not_running` once finished |
+| GET | `/api/audits/{audit}/issues` | `view_site_audit` + access | `{data: [{type, severity, title, why, how_to_fix, count, new_count}]}`: every issue type found, critical → warning → notice, then count desc, then type |
+| GET | `/api/audits/{audit}/issues/{type}` | `view_site_audit` + access | Paginated `data[]` {url, page_id, details, is_new} by URL; `search` (URL contains); plus `issue` {type, severity, title, why, how_to_fix}. 404 for a type not in the catalogue (a known type with no rows is an empty page) |
+| GET | `/api/audits/{audit}/pages` | `view_site_audit` + access | Paginated pages: `search` (URL or title), `status` (2xx/3xx/4xx/5xx, on the first response), `indexable` (1/0), `sort` (`url`, `status_code`, `response_ms`, `inlinks_count`, `word_count`, `depth`; `-` = desc; default depth then URL). Rows {id, url, depth, status_code, final_url, final_status_code, content_type, response_ms, title, meta_description, h1, h1_count, canonical, meta_robots, is_indexable, in_sitemap, inlinks_count, outlinks_count, word_count, images_count, images_missing_alt, issues_count} |
+| GET | `/api/audits/{audit}/pages/{page}` | `view_site_audit` + access | `{data: {…row above, redirect_chain [{url, status_code}]\|null, x_robots_tag, canonical_count, fetch_error, missing_alt_images [src ≤ 20], issues [{type, severity, title, details, is_new}], inlinks [{page_id, url, nofollow}] (first 50), inlinks_total}}`. A page of another audit 404s |
+| GET | `/api/audits/{audit}/vitals` | `view_site_audit` + access | `{data: [{url, strategy (mobile/desktop), performance_score (0–100)\|null, lab, field, status (done/failed), error}]}` (shapes below) |
+| GET | `/api/audits/{audit}/comparison` | `view_site_audit` + access | `filter` = `new` (default: in this audit, not the previous) or `fixed` (in the previous, not this one). Paginated `data[]` {type, severity, title, url, details} by severity, type, URL; `search`; plus `filter` and `comparison`. Empty when there is no previous audit |
 
 ### Search Console reports
 
@@ -131,6 +143,57 @@ Params on every report: `start`, `end` (Y-m-d; default the 28 days ending at the
 - Content decay, with D = `gsc_data_through`: last 28 days = D−27..D, previous = D−55..D−28; `monthly` = the 6 full months ending with D's month when D is its last day, else the month before; `decline_months` = how many months in a row clicks fell, ending at the last full month. Listed when the page had ≥ 20 clicks in the previous 28 days or any of those months, and either fell ≥ 20 % (`clicks_change_pct ≤ −20`) or fell 3+ months running.
 - An unlinked site: 409 `gsc_not_linked`. Linked but no data yet: 200 with zero totals, empty `series` / `data`, and `sync.status` (queued/syncing/failed) for the page to show.
 
+### Site audit
+
+Crawls run as queued jobs (`RunSiteAudit`, then `RunAuditVitals`) on the `redis-long` connection: **Horizon must run**. Status: `queued → crawling → analysing → done` (or `failed` with `error`, or `cancelled`); `vitals_status` runs separately: `pending → done | unavailable` (with `vitals_message`; a PageSpeed failure never fails the audit).
+
+**AuditSummary** = `{id, site_id, status, trigger (manual/scheduled), triggered_by {id, name}|null, page_limit, pages_crawled, pages_found, started_at, finished_at, error, health_score (0–100, null until analysed), counts {critical, warning, notice, total} (zeros until analysed), comparison {fixed, new, persisting, previous_audit_id}|null, vitals_status, vitals_message, details_pruned, created_at}`. `details_pruned` = true for audits beyond the latest 10 of the site: only this summary is kept (pages, links, issues and vitals deleted). `pages_found` = URLs discovered (links + sitemap), crawled or not.
+
+**Crawler.** Raw HTML (no JavaScript) with the `IndlelaBot/1.0 (+APP_URL)` user agent; robots.txt honoured (IndlelaBot group, else `*`); 4 requests at a time, 10 s timeout, 250 ms between batches; same site only (`www.` and apex are one site); breadth first from the home page up to depth 10, then sitemap URLs nobody linked to (depth null); page limit = the site's `audit_page_limit` (default 500, hard max 5000). Sitemaps: robots.txt `Sitemap:` lines, else `/sitemap.xml`, `/sitemap_index.xml`, `/wp-sitemap.xml`; indexes followed. URLs normalised (fragment and `utm_*`, `gclid`, `fbclid`, `msclkid`… dropped). Redirects followed hop by hop (max 10). After the crawl: internal images/files (≤ 300) and the 200 most-linked external URLs are status-checked (HEAD, GET fallback). Every fetched URL is a page row, redirects and errors included; status 0 = no response.
+
+**Health score** = 100 − Σ weight × (pages with ≥ 1 issue of that severity ÷ pages crawled) − Σ points × site-wide issues of that severity, rounded and clamped 0–100. Weights: critical 50, warning 30, notice 10; site-wide points: critical 25, warning 5, notice 2 (site-wide types: `homepage_noindex`, `robots_blocks_site`, `http_not_https`, `sitemap_missing`). No page crawled → 0. Recomputed when vitals arrive.
+
+**Comparison** with the previous `done` audit of the site by issue fingerprint (sha1 of type + URL + a detail key, e.g. the link target or the PSI strategy): fixed = in previous only, new = in this only, persisting = both. Vitals issues are left out unless both audits have `vitals_status` done.
+
+**Vitals** run on the home page + the 4 most-linked indexable pages, mobile and desktop. `lab` = `{lcp_ms, cls, tbt_ms, fcp_ms, si_ms}` (Lighthouse; ms as integers). `field` (CrUX, 75th percentile; null when Google has no data) is flat: `{lcp_ms, lcp_category, inp_ms, inp_category, cls, cls_category, category, origin_fallback}`, categories `good` / `needs_improvement` / `poor`; `origin_fallback` true = whole-site data, not this URL's. Issues: `poor_core_web_vitals` when performance < 50 or any field category poor; `needs_improvement_core_web_vitals` when < 90 or any needs improvement. On 429/quota: `vitals_status` unavailable with a message about `PAGESPEED_API_KEY`; some runs failing = done with "N of M PageSpeed tests failed".
+
+**Issue catalogue** (`App\Support\AuditIssues`: title, why it matters, how to fix; thresholds in `config/indlela.php` `audit.thresholds`). Content checks (title, description, H1, canonical presence, thin) apply to indexable pages (200, HTML, no noindex, canonical absent or self).
+
+| Type | Severity | Flagged when |
+|---|---|---|
+| `page_5xx` | critical | URL answers 5xx or not at all (status 0) |
+| `page_4xx` | critical | URL answers 4xx |
+| `broken_internal_link` | critical | Internal link or image whose final status is 4xx/5xx/none (`details.kind` link/image); one per source page + target |
+| `redirect_loop` | critical | Redirects come back to a URL in the chain, or > 10 hops |
+| `missing_title` | critical | No `<title>` |
+| `noindex_in_sitemap` | critical | In the sitemap but noindex (meta robots/googlebot or X-Robots-Tag) |
+| `homepage_noindex` | critical | Home page is noindex (site-wide) |
+| `canonical_to_non_200` | critical | Canonical target was crawled and didn't answer 200 |
+| `robots_blocks_site` | critical | robots.txt disallows the home page for IndlelaBot or Googlebot (site-wide; crawl stops if it blocks IndlelaBot) |
+| `http_not_https` | critical | The home page is served over http (site-wide) |
+| `broken_external_link` | warning | External link answers 404, 410, 5xx or nothing (401/403/429/999 = bot blocked, not flagged) |
+| `redirect_chain` | warning | ≥ 2 redirects before the final page |
+| `duplicate_title` / `duplicate_meta_description` | warning | Same value (case-insensitive) on ≥ 2 indexable pages; `details.other_urls` (≤ 5) |
+| `missing_meta_description` | warning | No meta description |
+| `missing_h1` | warning | No H1 |
+| `images_missing_alt` | warning | `<img>` without alt or with empty alt |
+| `noindex_linked_internally` | warning | Noindex page with internal inlinks |
+| `multiple_canonicals` | warning | > 1 distinct canonical |
+| `orphan_page` | warning | In the sitemap, 200, no internal inlinks (home excluded) |
+| `sitemap_missing` | warning | No sitemap found (site-wide) |
+| `poor_core_web_vitals` | warning | See vitals |
+| `internal_link_to_redirect` | notice | Internal link to a URL that redirects |
+| `title_too_long` / `title_too_short` | notice | > 60 / < 30 characters |
+| `meta_description_too_long` | notice | > 160 characters |
+| `multiple_h1` | notice | > 1 H1 |
+| `canonical_to_other_page` | notice | Canonical points to another URL (target 200 or not crawled) |
+| `missing_canonical` | notice | No canonical |
+| `slow_response` | notice | > 2 s to answer (200 HTML pages) |
+| `thin_content` | notice | < 200 visible words |
+| `needs_improvement_core_web_vitals` | notice | See vitals |
+
+**Schedule.** `site-audit:run-scheduled` (daily 02:00) queues an audit for each active site with `audit_schedule` weekly/monthly whose last done-or-failed audit finished 7/30 calendar days ago or more (or never), with none running; then prunes detail rows of all but the latest 10 audits per site.
+
 ## Permission catalogue
 
 Names are `{action}_{resource}` (`App\Support\Permissions`; the SPA's `src/config/modules.ts` mirrors it). Every action needs `view`. Owner-only resources can't be given to another role.
@@ -141,7 +204,7 @@ Names are `{action}_{resource}` (`App\Support\Permissions`; the SPA's `src/confi
 | Clients | `clients_clients` | view, create, update, delete | Adding needs a role that sees every client |
 | Clients | `clients_sites` | view, create, update, delete | |
 | Search Console | `search_console` | view, create, update, delete | View = connection status, sites and reports; update = connect/disconnect Google, link/unlink a property, sync now (create and delete are not used yet) |
-| Site audit | `site_audit` | view, create, update, delete | Not built yet. Create = run a crawl, update = mark issues / settings |
+| Site audit | `site_audit` | view, create, update, delete | View = sites, audits, issues, pages, vitals, comparison; update = run an audit now, cancel, audit settings (create and delete are not used yet) |
 | Rank tracking | `rank_tracking` | view, create, update, delete | Not built yet. Create = add keywords / "check now" |
 | Reports | `reports` | view, create, update, delete, approve | Not built yet. Approve = approve and send |
 | Settings | `settings_workspace` | view, update | Owner only |
