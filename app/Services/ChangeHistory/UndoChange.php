@@ -5,11 +5,13 @@ namespace App\Services\ChangeHistory;
 use App\Exceptions\UndoException;
 use App\Models\AuditLog;
 use App\Models\Client;
+use App\Models\MapGrid;
 use App\Models\RankKeyword;
 use App\Models\ReportSchedule;
 use App\Models\Role;
 use App\Models\Site;
 use App\Models\User;
+use App\Services\LocalGrid\GridLimits;
 use App\Services\RankTracking\RankLimits;
 use App\Support\AuditContext;
 use App\Support\ChangeHistory;
@@ -39,6 +41,7 @@ class UndoChange
     public function __construct(
         private readonly CurrentWorkspace $current,
         private readonly RankLimits $limits,
+        private readonly GridLimits $gridLimits,
     ) {}
 
     /** Why this entry can't be undone, or null if it can be tried (a later change may still stop it). */
@@ -119,7 +122,7 @@ class UndoChange
     {
         $restoring = $log->action_type === 'DELETE';
         match (true) {
-            $model instanceof Client, $model instanceof Site, $model instanceof RankKeyword => Gate::authorize($restoring ? 'delete' : 'update', $model),
+            $model instanceof Client, $model instanceof Site, $model instanceof RankKeyword, $model instanceof MapGrid => Gate::authorize($restoring ? 'delete' : 'update', $model),
             $model instanceof ReportSchedule => Gate::authorize('createReports', $model->site),
             $model instanceof Role => $this->authoriseRole($model),
             default => Gate::authorize('update_'.ChangeHistory::resource($log->table_name)),
@@ -211,7 +214,7 @@ class UndoChange
         $role->logAuditChange('UPDATE', $logged, ['name' => $role->name]);
     }
 
-    /** A deleted record brought back (its parent must still exist; a keyword needs room in the plan). */
+    /** A deleted record brought back (its parent must still exist; a keyword or grid needs room in the plan). */
     private function restore(AuditLog $log, Model $model): void
     {
         if (! method_exists($model, 'trashed') || ! $model->trashed()) {
@@ -226,6 +229,15 @@ class UndoChange
             }
             if ($model->is_active) {
                 $this->limits->ensureRoomFor((int) $model->workspace_id, 1, 'undo');
+            }
+        }
+
+        if ($model instanceof MapGrid) {
+            if ($model->site()->withTrashed()->first()?->trashed()) {
+                throw UndoException::notUndoable('Its site was deleted: undo that first.');
+            }
+            if ($model->is_active) {
+                $this->gridLimits->ensureRoomForGrid((int) $model->workspace_id, 'undo');
             }
         }
 

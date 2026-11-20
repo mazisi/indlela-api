@@ -22,7 +22,7 @@ class PermissionsTest extends TestCase
     public function test_the_catalogue_has_the_agreed_resources(): void
     {
         $this->assertSame(
-            ['dashboard', 'clients_clients', 'clients_sites', 'search_console', 'site_audit', 'rank_tracking', 'reports',
+            ['dashboard', 'clients_clients', 'clients_sites', 'search_console', 'site_audit', 'rank_tracking', 'local_grid', 'reports',
                 'settings_workspace', 'settings_users', 'settings_roles', 'settings_login_history', 'settings_email_templates', 'settings_change_history', 'platform_usage'],
             array_keys(Permissions::resources()),
         );

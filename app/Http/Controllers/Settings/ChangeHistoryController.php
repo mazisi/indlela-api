@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\ChangeEntryResource;
 use App\Models\AuditLog;
 use App\Models\Client;
+use App\Models\MapGrid;
 use App\Models\RankKeyword;
 use App\Models\Report;
 use App\Models\ReportSchedule;
@@ -105,7 +106,7 @@ class ChangeHistoryController extends Controller
 
     /**
      * This workspace's entries on these pages. A user limited to some clients
-     * sees client records (clients, sites, keywords, reports, schedules) of
+     * sees client records (clients, sites, keywords, grids, reports, schedules) of
      * those clients only, deleted ones included.
      */
     private function visible(Request $request, array $pages): Builder
@@ -122,6 +123,7 @@ class ChangeHistoryController extends Controller
             'clients' => Client::withTrashed()->whereKey($clientIds),
             'sites' => Site::withTrashed()->whereIn('client_id', $clientIds),
             'rank_keywords' => RankKeyword::withTrashed()->whereIn('site_id', $sites),
+            'map_grids' => MapGrid::withTrashed()->whereIn('site_id', $sites),
             'reports' => Report::withTrashed()->whereIn('client_id', $clientIds),
             'report_schedules' => ReportSchedule::query()->whereIn('site_id', $sites),
         ];

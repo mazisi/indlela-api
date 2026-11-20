@@ -38,7 +38,7 @@ class WorkspaceProvisioner
             'all_clients' => true,
             'levels' => [
                 'dashboard' => 'approve', 'clients' => 'approve', 'search_console' => 'approve', 'site_audit' => 'approve',
-                'rank_tracking' => 'approve', 'reports' => 'approve', 'settings' => 'edit',
+                'rank_tracking' => 'approve', 'local_grid' => 'approve', 'reports' => 'approve', 'settings' => 'edit',
             ],
         ],
         Role::ANALYST => [
@@ -46,7 +46,7 @@ class WorkspaceProvisioner
             'all_clients' => false,
             'levels' => [
                 'dashboard' => 'view', 'clients' => 'view', 'search_console' => 'edit', 'site_audit' => 'edit',
-                'rank_tracking' => 'edit', 'reports' => 'edit',
+                'rank_tracking' => 'edit', 'local_grid' => 'edit', 'reports' => 'edit',
             ],
         ],
         Role::CLIENT => [
@@ -54,7 +54,7 @@ class WorkspaceProvisioner
             'all_clients' => false,
             'levels' => [
                 'dashboard' => 'view', 'clients' => 'view', 'search_console' => 'view', 'site_audit' => 'view',
-                'rank_tracking' => 'view', 'reports' => 'view',
+                'rank_tracking' => 'view', 'local_grid' => 'view', 'reports' => 'view',
             ],
         ],
     ];
@@ -91,10 +91,16 @@ class WorkspaceProvisioner
      * Adds any default role the workspace is missing (with its default
      * permissions) and gives Owner every permission. Never changes what a
      * workspace has since done to its other roles in Settings › Roles.
+     *
+     * $added = catalogue permissions that didn't exist until now (a new
+     * page): existing default roles get those of them their defaults
+     * include, so a new page reaches them without touching anything else.
+     *
+     * @param  list<string>  $added
      */
-    public function ensureDefaultRoles(Workspace $workspace): void
+    public function ensureDefaultRoles(Workspace $workspace, array $added = []): void
     {
-        $this->current->using($workspace, function () use ($workspace) {
+        $this->current->using($workspace, function () use ($workspace, $added) {
             $owner = Role::inWorkspace($workspace->id)->firstOrCreate(
                 ['name' => Role::OWNER, 'guard_name' => 'web', 'workspace_id' => $workspace->id],
                 ['description' => 'Full access: users, roles, workspace settings and every client', 'all_clients' => true],
@@ -109,17 +115,24 @@ class WorkspaceProvisioner
 
                 if ($model->wasRecentlyCreated) {
                     $model->syncPermissions(Permissions::forGroupLevels($role['levels']));
+                } elseif ($new = array_values(array_intersect(Permissions::forGroupLevels($role['levels']), $added))) {
+                    $model->givePermissionTo($new);
                 }
             }
 
-            PlatformWorkspace::is($workspace) ? $this->ensureSuperuser($workspace) : $this->revokePlatformPermissions($workspace);
+            PlatformWorkspace::is($workspace) ? $this->ensureSuperuser($workspace, $added) : $this->revokePlatformPermissions($workspace);
         });
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }
 
-    /** The platform workspace's Superuser role, made once (later edits in Settings › Roles are kept). */
-    private function ensureSuperuser(Workspace $workspace): void
+    /**
+     * The platform workspace's Superuser role, made once (later edits in
+     * Settings › Roles are kept); a new page ($added) is given to it too.
+     *
+     * @param  list<string>  $added
+     */
+    private function ensureSuperuser(Workspace $workspace, array $added): void
     {
         $role = Role::withTrashed()->inWorkspace($workspace->id)->firstOrCreate(
             ['name' => Role::SUPERUSER, 'guard_name' => 'web', 'workspace_id' => $workspace->id],
@@ -128,6 +141,8 @@ class WorkspaceProvisioner
 
         if ($role->wasRecentlyCreated) {
             $role->syncPermissions(Permissions::grantableIn($workspace));
+        } elseif ($new = array_values(array_intersect(Permissions::grantableIn($workspace), $added))) {
+            $role->givePermissionTo($new);
         }
     }
 

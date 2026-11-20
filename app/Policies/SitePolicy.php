@@ -79,6 +79,24 @@ class SitePolicy
         return $this->allowSite($user, 'update_rank_tracking', $site);
     }
 
+    /** Local grid: the site's grids and their scans. */
+    public function viewLocalGrid(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'view_local_grid', $site);
+    }
+
+    /** Local grid: add a grid, search for its business. */
+    public function createLocalGrid(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'create_local_grid', $site);
+    }
+
+    /** Local grid: change the site's grids, "scan now". */
+    public function manageLocalGrid(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'update_local_grid', $site);
+    }
+
     /** Reports: the site's reports and its schedule. */
     public function viewReports(User $user, Site $site): Response
     {

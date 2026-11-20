@@ -2,6 +2,8 @@
 
 namespace Tests\Feature\Platform;
 
+use App\Models\MapGridSearch;
+use App\Models\Permission;
 use App\Models\RankCheck;
 use App\Models\Role;
 use App\Models\User;
@@ -11,7 +13,7 @@ use Database\Seeders\RolePermissionSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Tests\Support\AuthTestHelpers;
-use Tests\Support\RankTrackingHelpers;
+use Tests\Support\LocalGridHelpers;
 use Tests\TestCase;
 
 /**
@@ -21,7 +23,7 @@ use Tests\TestCase;
  */
 class PlatformUsageTest extends TestCase
 {
-    use AuthTestHelpers, RankTrackingHelpers, RefreshDatabase;
+    use AuthTestHelpers, LocalGridHelpers, RefreshDatabase;
 
     private Workspace $platform;
 
@@ -59,6 +61,14 @@ class PlatformUsageTest extends TestCase
             $this->actingAs($user, 'sanctum')->getJson('/api/platform/usage/workspaces')->assertOk()->assertJsonStructure(['data', 'links', 'meta']);
             $this->assertContains('view_platform_usage', $this->actingAs($user, 'sanctum')->getJson('/api/me')->json('permissions'));
         }
+    }
+
+    public function test_a_page_new_to_the_catalogue_reaches_the_superuser_too(): void
+    {
+        Permission::query()->where('name', 'like', '%_local_grid')->delete();
+        $this->seed(RolePermissionSeeder::class);
+
+        $this->assertContains('update_local_grid', $this->platformRole(Role::SUPERUSER)->permissions()->pluck('name'));
     }
 
     public function test_the_superuser_role_sees_every_client_and_has_every_grantable_permission(): void
@@ -213,6 +223,7 @@ class PlatformUsageTest extends TestCase
             'keywords_tracked' => 3,
             'checks_this_month' => 5,  // Alpha 4 (incl. the pending live), Beta 1
             'live_checks_this_month' => 2,
+            'grid_points_this_month' => 0,
         ], $data['totals']);
         $this->assertEquals([
             ['month' => '2026-06', 'cost' => 0, 'checks' => 0],
@@ -282,6 +293,27 @@ class PlatformUsageTest extends TestCase
 
         // Default sort: cost this month, highest first.
         $this->assertSame([$a->id, $b->id, $this->platform->id], $rows->keys()->all());
+    }
+
+    public function test_local_grid_spend_is_in_the_spend_series_and_rows(): void
+    {
+        [$a, $b] = $this->usageFixture();
+        $grid = $this->makeGrid($this->rankSite($this->makeClient($b), 'https://beta-grid.co.za'));
+        $this->makeScan($grid, array_fill(0, 9, 1));                                   // 9 x 0.002 this month
+        $this->makeScan($grid, array_fill(0, 9, 1), ['scanned_on' => '2026-10-05']);  // last month
+        MapGridSearch::query()->create(['workspace_id' => $b->id, 'query' => 'bakery', 'searched_on' => '2026-11-19', 'status' => 'done', 'cost' => 0.002]);
+
+        $data = $this->actingAs($this->staffOwner, 'sanctum')->getJson('/api/platform/usage')->assertOk()->json('data');
+        // Rank: charged 0.0038 + pending 0.002; grid: 0.018 + 0.002.
+        $this->assertEquals(['this_month' => 0.0258, 'pending' => 0.002, 'cap' => 50, 'cap_used_pct' => 0.1], $data['spend']);
+        $this->assertSame(9, $data['totals']['grid_points_this_month']);
+        $this->assertEquals([0.0006 + 0.018, 0.0038 + 0.02], [$data['series'][4]['cost'], $data['series'][5]['cost']]);
+
+        $beta = collect($this->actingAs($this->staffOwner, 'sanctum')->getJson('/api/platform/usage/workspaces')->json('data'))->keyBy('id')[$b->id];
+        $this->assertEquals(0.0206, $beta['cost_this_month']);
+        $this->assertEquals(0.018, $beta['cost_last_month']);
+        $this->assertSame(9, $beta['grid_points_this_month']);
+        $this->assertEquals([0, 0, 0, 0, 0.018, 0.0206], array_column($beta['series'], 'cost'));
     }
 
     public function test_workspaces_sort_search_and_paginate(): void

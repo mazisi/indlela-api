@@ -40,6 +40,7 @@
         <env name="AUDIT_DELAY_MS" value="0"/>
         <env name="PAGESPEED_API_KEY" value=""/>
         <env name="RANK_QUEUE_CONNECTION" value="sync"/>
+        <env name="LOCAL_GRID_QUEUE_CONNECTION" value="sync"/>
         <env name="REPORTS_QUEUE_CONNECTION" value="sync"/>
         <env name="RANK_LOCATIONS_QUEUE_CONNECTION" value="sync"/>
         <env name="DATAFORSEO_LOGIN" value="" force="true"/>
