@@ -3,6 +3,7 @@
 namespace App\Traits;
 
 use App\Models\AuditLog;
+use App\Support\AuditContext;
 use App\Support\CurrentWorkspace;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -25,6 +26,13 @@ trait Auditable
         static::deleted(function ($model) {
             $model->auditDelete();
         });
+
+        // A soft-deleted record brought back (Settings › Change history's undo).
+        if (method_exists(static::class, 'restored')) {
+            static::restored(function ($model) {
+                $model->createAuditLog('RESTORE', [], $model->withoutExcludedAudit($model->transformAttributesForAudit($model->getAttributes())));
+            });
+        }
     }
 
     protected function auditCreate()
@@ -59,14 +67,12 @@ trait Auditable
         $changes = $this->getChanges();
         $original = $this->getOriginal();
 
-        if (empty($changes)) {
-            return;
-        }
-
         unset($changes['updated_at']);
         $changes = $this->withoutExcludedAudit($changes);
+        // Changes outside the logged columns (a pivot, an excluded column shown another way).
+        $extra = $this->extraAuditChanges();
 
-        if (empty($changes)) {
+        if (empty($changes) && empty($extra)) {
             return;
         }
 
@@ -82,7 +88,7 @@ trait Auditable
             ];
         }
 
-        $fieldChanges += $this->extraAuditChanges();
+        $fieldChanges += $extra;
 
         $this->createAuditLog('UPDATE', $fieldChanges, $newAttributes, $oldAttributes);
     }
@@ -149,6 +155,7 @@ trait Auditable
                 'user_agent' => $request->userAgent(),
                 'device_browser' => $this->parseUserAgent($request->userAgent()),
                 'workspace_id' => $this->auditWorkspaceId(),
+                'undo_of' => AuditContext::$undoOf,
             ]);
         } catch (\Exception $e) {
             Log::error('Audit logging failed: '.$e->getMessage());
@@ -222,7 +229,8 @@ trait Auditable
 
     private function withoutExcludedAudit(array $attributes): array
     {
-        return array_diff_key($attributes, array_flip($this->auditExclude()));
+        // deleted_at: deleting and restoring are entries of their own, not a field change.
+        return array_diff_key($attributes, array_flip([...$this->auditExclude(), 'deleted_at']));
     }
 
     /**

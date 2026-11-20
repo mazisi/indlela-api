@@ -67,6 +67,8 @@ final class Permissions
             'settings_roles' => ['Roles and permissions', self::CRUD],
             'settings_login_history' => ['Login history', self::V],
             'settings_email_templates' => ['Email templates', ['view', 'update']],
+            // Every audited change on the pages the user may open; update = undo.
+            'settings_change_history' => ['Change history', ['view', 'update']],
         ]],
         // Indlela staff only, in the platform workspace: DataForSEO spend and every workspace's usage.
         'platform' => ['Platform', ['platform_usage' => ['Usage', self::V]]],

@@ -23,7 +23,7 @@ class PermissionsTest extends TestCase
     {
         $this->assertSame(
             ['dashboard', 'clients_clients', 'clients_sites', 'search_console', 'site_audit', 'rank_tracking', 'reports',
-                'settings_workspace', 'settings_users', 'settings_roles', 'settings_login_history', 'settings_email_templates', 'platform_usage'],
+                'settings_workspace', 'settings_users', 'settings_roles', 'settings_login_history', 'settings_email_templates', 'settings_change_history', 'platform_usage'],
             array_keys(Permissions::resources()),
         );
     }

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Traits\Auditable;
 use App\Traits\BelongsToWorkspace;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Report extends Model
 {
-    use BelongsToWorkspace, SoftDeletes;
+    use Auditable, BelongsToWorkspace, SoftDeletes;
 
     public const GENERATING = 'generating';
 
@@ -36,6 +37,30 @@ class Report extends Model
     protected $guarded = ['id'];
 
     protected $hidden = ['share_token'];
+
+    /**
+     * History: generated, emailed, shared or unshared, deleted. Not the
+     * snapshot, the PDF's path or the generation's progress, and never the
+     * share token (a secret): sharing shows as "Shared" yes/no instead.
+     */
+    protected function auditExclude(): array
+    {
+        return ['data', 'summary', 'pdf_path', 'status', 'error', 'share_token'];
+    }
+
+    protected function transformAttributesForAudit(array $attributes): array
+    {
+        return $attributes + ['_label' => $attributes['title'] ?? null];
+    }
+
+    protected function extraAuditChanges(): array
+    {
+        if (! $this->exists || ! $this->wasChanged('share_token')) {
+            return [];
+        }
+
+        return ['shared' => ['old' => $this->getOriginal('share_token') !== null, 'new' => $this->share_token !== null]];
+    }
 
     protected function casts(): array
     {
