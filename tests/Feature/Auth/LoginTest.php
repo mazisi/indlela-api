@@ -101,7 +101,7 @@ class LoginTest extends TestCase
             ->assertJsonPath('user.role', 'Analyst')
             ->assertJsonPath('user.sees_all_clients', false)
             ->assertJsonPath('roles.0', 'Analyst')
-            ->assertJsonPath('workspace', ['id' => $workspace->id, 'name' => $workspace->name, 'slug' => $workspace->slug, 'logo_url' => null])
+            ->assertJsonPath('workspace', ['id' => $workspace->id, 'name' => $workspace->name, 'slug' => $workspace->slug, 'logo_url' => null, 'brand_color' => null])
             ->assertJsonPath('workspaces', [['id' => $workspace->id, 'name' => $workspace->name, 'slug' => $workspace->slug, 'logo_url' => null, 'role' => 'Analyst']])
             ->assertJsonStructure(['token', 'permissions', 'user' => ['clients' => [['id', 'name']]]]);
 

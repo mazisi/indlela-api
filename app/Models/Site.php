@@ -113,6 +113,22 @@ class Site extends Model
         return $this->hasOne(SiteAudit::class)->ofMany(['id' => 'max'], fn (Builder $q) => $q->whereIn('status', SiteAudit::RUNNING));
     }
 
+    public function reports(): HasMany
+    {
+        return $this->hasMany(Report::class);
+    }
+
+    /** The newest report (any status). */
+    public function latestReport(): HasOne
+    {
+        return $this->hasOne(Report::class)->latestOfMany('id');
+    }
+
+    public function reportSchedule(): HasOne
+    {
+        return $this->hasOne(ReportSchedule::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

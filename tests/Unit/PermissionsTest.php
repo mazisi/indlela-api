@@ -12,7 +12,8 @@ class PermissionsTest extends TestCase
     {
         $this->assertContains('update_clients_sites', Permissions::all());
         $this->assertContains('view_dashboard', Permissions::all());
-        $this->assertContains('approve_reports', Permissions::all());
+        $this->assertContains('delete_reports', Permissions::all());
+        $this->assertNotContains('approve_reports', Permissions::all(), 'reports: view, create, delete');
         $this->assertNotContains('create_dashboard', Permissions::all(), 'the dashboard is view only');
         $this->assertSame('clients_sites', Permissions::resourceOf('update_clients_sites'));
         $this->assertSame('search_console', Permissions::resourceOf('view_search_console'));

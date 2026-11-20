@@ -57,7 +57,8 @@ return [
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
-            'report' => false,
+            // Log adapter failures the disk swallows (AccessDenied, NoSuchBucket, …): writes return false.
+            'report' => true,
         ],
 
     ],

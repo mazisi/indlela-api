@@ -29,8 +29,6 @@ final class Permissions
 
     private const CRUD = ['view', 'create', 'update', 'delete'];
 
-    private const CRUDA = ['view', 'create', 'update', 'delete', 'approve'];
-
     /**
      * Only Owners hold these; they can't be given to other roles (workforce's
      * System Administrator pages, plus the workspace itself).
@@ -61,8 +59,8 @@ final class Permissions
         'site_audit' => ['Site audit', ['site_audit' => ['Site audit', self::CRUD]]],
         // MVP 1: DataForSEO. Update = add, change or remove keywords and "check now" (Live mode, costs more); create/delete unused so far.
         'rank_tracking' => ['Rank tracking', ['rank_tracking' => ['Rank tracking', self::CRUD]]],
-        // MVP 4: white-label reports. Approve = approve and send (never auto-sent).
-        'reports' => ['Reports', ['reports' => ['Reports', self::CRUDA]]],
+        // MVP 4: white-label reports. Create = generate, send, share links, monthly schedule; delete = delete a report.
+        'reports' => ['Reports', ['reports' => ['Reports', ['view', 'create', 'delete']]]],
         'settings' => ['Settings', [
             'settings_workspace' => ['Workspace', ['view', 'update']],
             'settings_users' => ['Users and access', self::CRUD],

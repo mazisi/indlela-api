@@ -20,7 +20,10 @@ class Workspace extends Model
 {
     use Auditable, HasFactory, SoftDeletes;
 
-    protected $fillable = ['name', 'slug', 'logo_path'];
+    /** The reports' accent when the workspace has set none (navy). */
+    public const DEFAULT_BRAND_COLOR = '#1f4e79';
+
+    protected $fillable = ['name', 'slug', 'logo_path', 'brand_color'];
 
     protected function casts(): array
     {
@@ -49,6 +52,12 @@ class Workspace extends Model
     public function logoUrl(): ?string
     {
         return $this->logo_path ? Storage::url($this->logo_path) : null;
+    }
+
+    /** The white-label accent of its reports (#rrggbb). */
+    public function brandColor(): string
+    {
+        return $this->brand_color ?: self::DEFAULT_BRAND_COLOR;
     }
 
     /** Active rank-tracking keywords this workspace may have: its own limit, else the beta default. */

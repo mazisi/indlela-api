@@ -7,7 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
- * The current workspace as the SPA keeps it: `{id, name, slug, logo_url}`.
+ * The current workspace as the SPA keeps it: `{id, name, slug, logo_url, brand_color}`
+ * (brand_color: the reports' accent, null = the default navy).
  * The switcher's list (AccountState::workspaces) adds the user's `role` there.
  *
  * @mixin Workspace
@@ -21,6 +22,7 @@ class WorkspaceResource extends JsonResource
             'name' => $this->name,
             'slug' => $this->slug,
             'logo_url' => $this->resource->logoUrl(),
+            'brand_color' => $this->brand_color,
         ];
     }
 }

@@ -161,6 +161,23 @@ php artisan db:seed --class=RankDemoSeeder
 
 Adds 60 keywords (10 phrases × South Africa, Johannesburg and a Sandton coordinate × desktop and mobile) with 90 days of results to `demo.indlela.local` in the first workspace: trends, this week's gains and drops, keywords outside the top 100, URL switches (cannibalisation) and SERP features. Re-running replaces only that site's keywords. Not part of `db:seed`. The demo keywords are active, so once DataForSEO is configured the nightly job checks them too.
 
+## White-label reports
+
+A report is one site's results for a period (Search Console, rank tracking, site audit; any of the three) as a **PDF**, a **share link** (`{FRONTEND_URL}/r/{token}`, no sign-in, optional expiry) and an **email** to the client, with a short plain-language summary at the top ("Search traffic up 14% (5,190 clicks)", "6 keywords entered the top 10", "2 critical issues need attention"). Routes, snapshot shape and summary rules: `docs/API.md` › White-label reports.
+
+- **White-label.** The client sees the agency, never Indlela: the workspace's logo and name (Settings › Workspace) and its **brand colour** (`brand_color`, `#RRGGBB`, default navy `#1f4e79`) in the PDF header and accents, the share page and the email. The email's sender name is the workspace (the address stays `MAIL_FROM_ADDRESS`, so SPF/DKIM keep working), replies go to the agency person who sent or generated it (else the workspace's first Owner), and it uses its own layout with no app name or footer. Its wording is the workspace's `client_report` template in Settings › Email templates.
+- **Frozen.** Numbers are read once, when the report is generated, and stored with it (`reports.data`): the PDF, the in-app view, the share page and the email always agree, even after a re-sync. Generate a new report for new numbers.
+- **PDF** is rendered by [dompdf](https://github.com/barryvdh/laravel-dompdf) from `resources/views/reports/pdf.blade.php` (A4, DejaVu Sans subset so files stay ~35 KB; charts are small server-built SVGs; page numbers drawn by dompdf) and stored at `reports/{workspace_id}/{report_id}.pdf` on the default disk. Generation is the `GenerateReport` job on the `redis-long` queue (Horizon's `supervisor-long`): Horizon must run.
+- **Monthly email.** A site can have one schedule (day 1–28, time on the hour 00:00–23:00 SAST (default 08:00), recipients, sections). `reports:run-scheduled` runs every hour and sends the previous calendar month's report to the schedule's recipients; it runs once per site per month, however often the command runs. The scheduler must run (`php artisan schedule:work` locally). Run it by hand: `php artisan reports:run-scheduled` (only schedules whose day is today and whose hour has come).
+
+### Demo report
+
+```bash
+php artisan db:seed --class=ReportDemoSeeder
+```
+
+After the three demo seeders above: generates last month's report of `demo.indlela.local` in the first workspace (synchronously: a real PDF on the S3 store), shares it for 90 days and prints the link; gives the workspace a demo brand colour if it has none. Each run adds a report. The demo audits are dated this month, so last month's report says no audit had finished yet.
+
 ## Platform usage (Indlela staff)
 
 **Platform › Usage** shows the company's DataForSEO spend (this month, pending, against the cap, the account balance) and every workspace's rank-tracking usage, so staff can set prices and raise a beta tester's keyword limit. Customers never see it: it exists only in one **platform workspace** (endpoints and rules: `docs/API.md` › Platform).
