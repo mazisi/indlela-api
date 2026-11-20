@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Models\Role;
 use App\Models\User;
+use App\Services\SearchConsole\GoogleSearchConsoleApi;
+use App\Services\SearchConsole\SearchConsoleApi;
 use App\Services\Sms\LogSmsSender;
 use App\Services\Sms\SmsSender;
 use App\Services\Sms\TwilioSmsSender;
@@ -21,6 +23,9 @@ class AppServiceProvider extends ServiceProvider
     {
         // One per request (and per job/Octane request): which workspace the code acts in.
         $this->app->scoped(CurrentWorkspace::class);
+
+        // Search Console over Google's REST API (tests use Http::fake).
+        $this->app->bind(SearchConsoleApi::class, GoogleSearchConsoleApi::class);
 
         $this->app->singleton(SmsSender::class, fn () => match (config('indlela.sms.driver')) {
             'twilio' => TwilioSmsSender::fromConfig(),

@@ -43,6 +43,18 @@ class SitePolicy
         return $this->allowSite($user, 'delete_clients_sites', $site);
     }
 
+    /** Search Console reports of the site. */
+    public function viewSearchConsole(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'view_search_console', $site);
+    }
+
+    /** Link / unlink a property, "sync now". */
+    public function manageSearchConsole(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'update_search_console', $site);
+    }
+
     private function allowSite(User $user, string $permission, Site $site): Response
     {
         if (! $this->inCurrentWorkspace($site)) {

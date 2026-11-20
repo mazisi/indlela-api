@@ -26,6 +26,7 @@ Progress (built, next, waiting on other modules) lives in `docs/PROGRESS.md` (gi
 - Transactional email = a case on `App\Mail\EmailTemplateType` + `TemplatedMail`, wording editable per workspace in `email_templates` (code defaults when a workspace has no row). User-level emails (PIN, reset) use the user's current workspace's wording. SMS via `App\Services\Sms\SmsSender` (`SMS_DRIVER=log|twilio`).
 - Files go on the default `s3` disk (the S3-compatible `minio` Sail service locally; real S3 later). Jobs run on Redis under Horizon.
 - Every migration needs a working `down()`. Unique indexes on soft-deleted tables are partial (`WHERE deleted_at IS NULL`) and per workspace.
+- **Search Console.** One `google_connections` row per workspace (tokens `encrypted` casts, never serialised); OAuth via Laravel's Http client (`Services/SearchConsole/GoogleOAuth`, no google/apiclient). `/google/callback` is public: who/where come from the encrypted, single-use, 10-minute `state`. `GoogleConnectionService::accessToken()` refreshes; `invalid_grant` marks the connection `error` and answers 409 `google_not_connected`. Google calls go through the `SearchConsoleApi` interface (tests: `Http::fake`). Data: `gsc_daily_totals` (accurate totals) and `gsc_query_page_daily` (query × page × day, md5 hash columns for uniqueness), both upserted so re-syncs are idempotent; unlinking or relinking another property deletes a site's rows. `SyncSearchConsole` carries site + workspace ids, runs in `CurrentWorkspace::using()`, is unique per site and runs on the `redis-long` connection (retry_after 1900 s > job timeout 1800 s; Horizon `supervisor-long`). Reports (`SearchConsoleReports`) are single GROUP BY queries paginated in SQL, built from the models so the workspace scope applies; thresholds and the expected-CTR curve live in `config/indlela.php` `search_console`. Site sync bookkeeping columns are excluded from the audit trail (linking a property is audited).
 - Paginated lists default to **15 per page** (`per_page` 10–100). List pages get `DELETE /x/{id}` and `POST /x/bulk {action, ids}` through the `Controllers\Concerns\SettingsList` trait (`sortList`, `bulkActive` with a 409 hook for rows in use, `historyOf`), changing each row through its model so every change is audited.
 
 ## Commands
@@ -36,6 +37,7 @@ Progress (built, next, waiting on other modules) lives in `docs/PROGRESS.md` (gi
 ./vendor/bin/sail artisan storage:bucket                  # once: create the AWS_BUCKET bucket
 ./vendor/bin/sail artisan horizon                         # queue worker; dashboard http://localhost:8000/horizon
 ./vendor/bin/sail artisan test                            # phpunit against Postgres indlela_testing
+php artisan db:seed --class=GscDemoSeeder                 # demo Search Console data (first workspace, demo.indlela.local)
 ./vendor/bin/sail bin pint                                # code style
 ```
 

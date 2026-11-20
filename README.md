@@ -65,6 +65,30 @@ The SPA runs on http://localhost:5173 (`FRONTEND_URL`), which CORS allows; it si
 
 About the `minio` service: MinIO no longer publishes Docker images, so it runs RustFS, an S3-compatible server (the one Sail itself now ships). The app only sees an S3 endpoint (`AWS_ENDPOINT=http://minio:9000`, path-style), so swapping in real S3 later is a `.env` change.
 
+## Search Console
+
+### Google Cloud set-up (once per environment)
+
+1. In the [Google Cloud console](https://console.cloud.google.com/) create a project (e.g. "Indlela local").
+2. APIs & Services › Library: enable **Google Search Console API**.
+3. APIs & Services › OAuth consent screen: user type **External**; add the scopes `.../auth/webmasters.readonly`, `openid` and `email`; while the app is in *Testing*, add every Google account that will connect under **Test users** (test-mode consents expire after 7 days: reconnect then).
+4. APIs & Services › Credentials › Create credentials › **OAuth client ID**, type **Web application**, Authorised redirect URI `http://localhost:8000/api/google/callback` (exactly; add the production URL there later).
+5. Put the client ID and secret in `.env`: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (and `GOOGLE_REDIRECT_URI` if it differs).
+
+In the app: Search Console › Connect Google, pick the agency's Google account (the one with access to the clients' properties), then link each site to its property. One Google account per workspace.
+
+### Syncing
+
+Linking a property queues a 16-month backfill; `search-console:sync` (scheduled daily at 05:30, or run it by hand, `--site=ID` for one) re-fetches the last 5 days of every linked site. Syncs are queued jobs on the `redis-long` connection, so **Horizon must be running** (its `supervisor-long` processes them); run the scheduler with `php artisan schedule:work` locally. Thresholds for the reports (quick-win band, minimum impressions, the expected-CTR curve, decay rules) are in `config/indlela.php` under `search_console`.
+
+### Demo data (no Google account needed)
+
+```bash
+php artisan db:seed --class=GscDemoSeeder
+```
+
+Adds the client "Demo Client" and the site `demo.indlela.local` to the first workspace (if missing) and fills it with ~16 months of generated Search Console data (~150 queries on 30 pages, ~90k rows) so every report has rows. Re-running replaces only that site's data. It is not part of `db:seed`.
+
 ## Tests
 
 ```bash

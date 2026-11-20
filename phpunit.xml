@@ -35,6 +35,7 @@
         <env name="AUTH_PIN_ENABLED" value="true" force="true"/>
         <env name="SMS_DRIVER" value="log"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="GSC_QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

@@ -20,8 +20,18 @@ class Site extends Model
     /** @use HasFactory<SiteFactory> */
     use Auditable, BelongsToWorkspace, HasFactory, SoftDeletes;
 
+    public const GSC_IDLE = 'idle';
+
+    public const GSC_QUEUED = 'queued';
+
+    public const GSC_SYNCING = 'syncing';
+
+    public const GSC_DONE = 'done';
+
+    public const GSC_FAILED = 'failed';
+
     /** The database defaults, so a model just created answers like a loaded one. */
-    protected $attributes = ['is_active' => true];
+    protected $attributes = ['is_active' => true, 'gsc_sync_status' => self::GSC_IDLE];
 
     protected $fillable = ['client_id', 'name', 'url', 'domain', 'is_active'];
 
@@ -35,7 +45,28 @@ class Site extends Model
 
     protected function casts(): array
     {
-        return ['is_active' => 'boolean'];
+        return [
+            'is_active' => 'boolean',
+            'gsc_synced_at' => 'datetime',
+            'gsc_data_through' => 'date',
+        ];
+    }
+
+    /** Linking a property is history; the sync's bookkeeping isn't. */
+    protected function auditExclude(): array
+    {
+        return ['gsc_sync_status', 'gsc_synced_at', 'gsc_data_through', 'gsc_sync_error'];
+    }
+
+    public function hasSearchConsole(): bool
+    {
+        return $this->gsc_property !== null;
+    }
+
+    /** Sites with a Search Console property linked. */
+    public function scopeLinkedToSearchConsole(Builder $query): Builder
+    {
+        return $query->whereNotNull($this->qualifyColumn('gsc_property'));
     }
 
     /** History shows the client's name, not its id ("acme.co.za · Acme"). */

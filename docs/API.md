@@ -44,6 +44,7 @@ Differences from workforce-api's contract: `workspace` and `workspaces` are new;
 - An authenticated request by a user disabled or locked meanwhile: 401 `{message, error_type: account_disabled|account_locked}` (token revoked). A user in no workspace: 403 `{message, error_type: no_workspace}`.
 - Rows still in use: 409 `{message}`. A save racing another on a unique index: 409.
 - Settings › Roles save failure: 500 `{message, error_type: role_permissions_failed}`.
+- Search Console: 409 `{message, error_type}` with `google_not_connected` (no Google account, or its access was revoked/expired: connect again) or `gsc_not_linked` (the site has no property). Google refusing a request: 502 `{message, error_type: google_api_error}`.
 
 ## Endpoints
 
@@ -102,6 +103,33 @@ Differences from workforce-api's contract: `workspace` and `workspaces` are new;
 | DELETE | `/api/sites/{site}` | `delete_clients_sites` + access | Soft delete |
 | POST | `/api/sites/bulk` | `update_`/`delete_clients_sites` + access to each | `action` (activate/deactivate/delete), `ids[]` ≤ 100; all or nothing |
 | GET | `/api/sites/history` | `view_clients_sites` | Changes to the sites of the clients the user may access; `record_label` "karoocoffee.co.za · Karoo Coffee" |
+| GET | `/api/google/connection` | `view_search_console` | `data`: null or {id, google_email, status (active/error), last_error, connected_by {id, name}, connected_at}: the workspace's Google account (one per workspace) |
+| POST | `/api/google/connect` | `update_search_console` | `{url}`: Google's consent URL (scopes `openid email webmasters.readonly`, offline, `prompt=consent`). `state` is encrypted (workspace, user, single-use nonce, 10-minute expiry) |
+| GET | `/api/google/callback` | public | Google's redirect (`code`, `state` or `error`): checks state and that the user still holds `update_search_console` there, stores the tokens (encrypted), replacing the workspace's previous connection, then redirects to `FRONTEND_URL/dashboard/search-console?google=connected` or `?google=error&message=…` |
+| DELETE | `/api/google/connection` | `update_search_console` | Revokes the token at Google (best effort) and deletes the connection; 204. Sites keep their property, syncing stops |
+| GET | `/api/google/properties` | `update_search_console` | `data[]` {site_url, permission_level} the account can read (unverified ones left out), by site_url. 409 `google_not_connected` |
+| GET | `/api/search-console/sites` | `view_search_console` | Every site the user can access, by client then name (not paginated): `data[]` {id, name, url, client {id, name}, gsc_property, gsc_sync_status (idle/queued/syncing/done/failed), gsc_synced_at, gsc_data_through (Y-m-d), gsc_sync_error} |
+| PUT | `/api/sites/{site}/search-console` | `update_search_console` + access | `property` (one of `/google/properties`, not linked to another site of the workspace) → links it and queues the 16-month backfill; `data` = the site as above. Another property than before deletes the old data. 409 `google_not_connected` |
+| DELETE | `/api/sites/{site}/search-console` | `update_search_console` + access | Unlinks and deletes the site's Search Console data; 204 |
+| POST | `/api/sites/{site}/search-console/sync` | `update_search_console` + access | Queues a sync now: 202 + the site. 409 `gsc_not_linked` / `google_not_connected` |
+| GET | `/api/sites/{site}/search-console/overview` | `view_search_console` + access | Report params below. `{period, compare_period, data_through, totals {clicks, impressions, ctr, position}, compare_totals, series[{date, clicks, impressions, ctr, position}], compare_series, sync}`; every day of the period is in `series` (0 / null position on days without data) |
+| GET | `/api/sites/{site}/search-console/queries` | `view_search_console` + access | Paginated `data[]` {query, clicks, impressions, ctr, position, clicks_change, position_change} + `period`, `compare_period`, `sync`. Sort `clicks` (default `-clicks`), `impressions`, `ctr`, `position`, `clicks_change`, `position_change` |
+| GET | `/api/sites/{site}/search-console/pages` | `view_search_console` + access | Same with `page` instead of `query` |
+| GET | `/api/sites/{site}/search-console/quick-wins` | `view_search_console` + access | Paginated `data[]` {query, page, impressions, clicks, ctr, position, potential_clicks}. Sort `potential_clicks` (default desc), `impressions`, `clicks`, `ctr`, `position` |
+| GET | `/api/sites/{site}/search-console/low-ctr` | `view_search_console` + access | Paginated `data[]` {page, impressions, clicks, ctr, expected_ctr, position, missed_clicks, top_queries[3]}. Sort `missed_clicks` (default desc), `impressions`, `clicks`, `ctr`, `expected_ctr`, `position` |
+| GET | `/api/sites/{site}/search-console/content-decay` | `view_search_console` + access | Paginated `data[]` {page, clicks_last_28, clicks_prev_28, clicks_change_pct, monthly[{month: YYYY-MM, clicks} x 6], decline_months} + `sync` (no `period`: always as of `gsc_data_through`, start/end ignored). Sort `clicks_lost` (= prev − last; default desc), `clicks_last_28`, `clicks_prev_28`, `clicks_change_pct`, `decline_months` |
+
+### Search Console reports
+
+Params on every report: `start`, `end` (Y-m-d; default the 28 days ending at the site's `gsc_data_through`, or yesterday before the first sync; at most 16 months), `compare` (`previous` default = the same number of days just before, `year` = the same dates a year earlier, `none`), and on the lists `search` (case-insensitive contains on query/page), `sort` (`col` ascending, `-col` descending; an unknown column is 422), `page`, `per_page` (10–100, default 15). Lists use the resource pagination shape (`data`, `links`, `meta`) plus `sync` {status, synced_at, data_through, error}.
+
+- CTR is a fraction (0–1, 4 decimals); position is the impression-weighted average (1 decimal). Overview totals come from Google's daily totals (accurate); queries/pages/quick wins/low CTR/decay add up query × page rows, which leave out anonymised queries, so they sum lower.
+- `clicks_change` = clicks − compare clicks; `position_change` = position − compare position (negative = moved up), null when the row had no impressions in the compare period; both null with `compare=none`.
+- Quick wins: queries averaging position 5–15 with ≥ 100 impressions per 28 days (scaled to the period); `page` = the query's page with most impressions; `potential_clicks` = (impressions × expected CTR at position 3 − clicks) × 30 / days in period, at least 0.
+- Low CTR: pages averaging position ≤ 10 with ≥ 200 impressions per 28 days and `ctr < expected_ctr × 0.7`; `missed_clicks` = impressions × expected_ctr − clicks over the period; `top_queries` = the page's 3 queries with most impressions.
+- Expected CTR by rounded position (`config/indlela.php` `search_console.expected_ctr`): 1: 28 %, 2: 15.5 %, 3: 11 %, 4: 8 %, 5: 6.5 %, 6: 5 %, 7: 4 %, 8: 3.2 %, 9: 2.7 %, 10: 2.3 %, 11–20: 1.6 % falling to 0.45 % (beyond 20: 0.45 %).
+- Content decay, with D = `gsc_data_through`: last 28 days = D−27..D, previous = D−55..D−28; `monthly` = the 6 full months ending with D's month when D is its last day, else the month before; `decline_months` = how many months in a row clicks fell, ending at the last full month. Listed when the page had ≥ 20 clicks in the previous 28 days or any of those months, and either fell ≥ 20 % (`clicks_change_pct ≤ −20`) or fell 3+ months running.
+- An unlinked site: 409 `gsc_not_linked`. Linked but no data yet: 200 with zero totals, empty `series` / `data`, and `sync.status` (queued/syncing/failed) for the page to show.
 
 ## Permission catalogue
 
@@ -112,7 +140,7 @@ Names are `{action}_{resource}` (`App\Support\Permissions`; the SPA's `src/confi
 | Dashboard | `dashboard` | view | |
 | Clients | `clients_clients` | view, create, update, delete | Adding needs a role that sees every client |
 | Clients | `clients_sites` | view, create, update, delete | |
-| Search Console | `search_console` | view, create, update, delete | Not built yet. Create = connect a property, delete = disconnect |
+| Search Console | `search_console` | view, create, update, delete | View = connection status, sites and reports; update = connect/disconnect Google, link/unlink a property, sync now (create and delete are not used yet) |
 | Site audit | `site_audit` | view, create, update, delete | Not built yet. Create = run a crawl, update = mark issues / settings |
 | Rank tracking | `rank_tracking` | view, create, update, delete | Not built yet. Create = add keywords / "check now" |
 | Reports | `reports` | view, create, update, delete, approve | Not built yet. Approve = approve and send |
