@@ -37,6 +37,23 @@ class SerpParserTest extends TestCase
         $this->assertSame(4200000, $parsed['result_count']);
     }
 
+    public function test_organic_hosts_by_position_for_competitors(): void
+    {
+        $result = ['items' => [
+            ['type' => 'featured_snippet', 'rank_group' => 1, 'url' => 'https://snippet.co.za/', 'domain' => 'snippet.co.za'],
+            $this->organic(1, 'https://WWW.Rival.co.za/'),
+            $this->organic(2, 'https://karoo.co.za/coffee'),
+            $this->organic(4, 'https://shop.beta.co.za/x', ''),     // no domain: the URL's host
+            $this->organic(4, 'https://second.co.za/'),             // same position again: the first stays
+            $this->organic(101, 'https://deep.co.za/'),             // beyond the depth
+        ]];
+
+        $this->assertSame(['rival.co.za', 'karoo.co.za', null, 'shop.beta.co.za'], SerpParser::parse($result, 'karoo.co.za')['organic_domains']);
+        $this->assertSame([], SerpParser::parse(null, 'karoo.co.za')['organic_domains']);
+        $this->assertTrue(SerpParser::matches('shop.rival.co.za', 'rival.co.za'));
+        $this->assertFalse(SerpParser::matches('notrival.co.za', 'rival.co.za'));
+    }
+
     public function test_not_in_the_top_100_and_an_empty_result(): void
     {
         $parsed = SerpParser::parse(['items' => [$this->organic(1, 'https://rival.co.za/')]], 'www.karoo.co.za');

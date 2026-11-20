@@ -31,7 +31,7 @@ class RankReports
 
     public const BUCKETS = ['top3', 'top10', 'top100', 'not_ranking'];
 
-    /** @param  array<string, mixed>  $filters  search, device, location, tag, bucket, sort */
+    /** @param  array<string, mixed>  $filters  search, device, location, tag, bucket, is_key, sort */
     public function keywords(Site $site, array $filters, int $perPage): LengthAwarePaginator
     {
         $query = RankKeywordQuery::for($site->id)
@@ -39,7 +39,8 @@ class RankReports
             ->when($filters['device'] ?? null, fn (Builder $q, string $d) => $q->where('rank_keywords.device', $d))
             ->when($filters['location'] ?? null, fn (Builder $q, string $l) => $q->whereRaw('rank_keywords.location_name ILIKE ?', [self::like($l)]))
             ->when($filters['tag'] ?? null, fn (Builder $q, string $t) => $q->whereRaw('rank_keywords.tags::jsonb @> ?::jsonb', [json_encode([$t])]))
-            ->when($filters['bucket'] ?? null, fn (Builder $q, string $b) => RankKeywordQuery::bucket($q, $b));
+            ->when($filters['bucket'] ?? null, fn (Builder $q, string $b) => RankKeywordQuery::bucket($q, $b))
+            ->when(isset($filters['is_key']), fn (Builder $q) => $q->where('rank_keywords.is_key', filter_var($filters['is_key'], FILTER_VALIDATE_BOOLEAN)));
 
         $sort = $filters['sort'] ?? 'keyword';
         $direction = str_starts_with($sort, '-') ? 'desc' : 'asc';

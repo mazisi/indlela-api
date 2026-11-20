@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\RankTracking\CompetitorController;
 use App\Http\Controllers\RankTracking\RankKeywordController;
 use App\Http\Controllers\RankTracking\RankTrackingController;
 use App\Http\Controllers\RankTracking\RankTrackingReportController;
@@ -19,6 +20,21 @@ Route::middleware(['auth:sanctum', 'active', 'workspace'])->group(function () {
         Route::post('/rank-keywords/bulk', [RankKeywordController::class, 'bulk']);
         Route::get('/rank-tracking/summary', [RankTrackingReportController::class, 'summary']);
         Route::get('/rank-tracking/cannibalisation', [RankTrackingReportController::class, 'cannibalisation']);
+
+        // Competitors (the site's Competitors tab).
+        Route::get('/competitors', [CompetitorController::class, 'index']);
+        Route::post('/competitors', [CompetitorController::class, 'store']);
+        Route::get('/competitors/suggestions', [CompetitorController::class, 'suggestions']);
+        Route::get('/competitors/overview', [CompetitorController::class, 'overview']);
+        Route::get('/competitors/keywords', [CompetitorController::class, 'keywords']);
+        Route::get('/competitor-alerts', [CompetitorController::class, 'alerts']);
+        Route::get('/competitor-settings', [CompetitorController::class, 'settings']);
+        Route::put('/competitor-settings', [CompetitorController::class, 'updateSettings']);
+    });
+
+    Route::prefix('/competitors/{competitor}')->whereNumber('competitor')->group(function () {
+        Route::put('/', [CompetitorController::class, 'update']);
+        Route::delete('/', [CompetitorController::class, 'destroy']);
     });
 
     Route::prefix('/rank-keywords/{rankKeyword}')->whereNumber('rankKeyword')->group(function () {

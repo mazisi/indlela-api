@@ -129,6 +129,17 @@ class Site extends Model
         return $this->hasOne(ReportSchedule::class);
     }
 
+    /** Competitors followed on the site's tracked keywords (paused ones too). */
+    public function competitors(): HasMany
+    {
+        return $this->hasMany(SiteCompetitor::class);
+    }
+
+    public function competitorSettings(): HasOne
+    {
+        return $this->hasOne(SiteCompetitorSetting::class);
+    }
+
     public function scopeActive(Builder $query): Builder
     {
         return $query->where('is_active', true);

@@ -6,6 +6,7 @@ use App\Models\Client;
 use App\Models\RankCheck;
 use App\Models\RankKeyword;
 use App\Models\Site;
+use App\Models\SiteCompetitor;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Sleep;
@@ -103,6 +104,28 @@ trait RankTrackingHelpers
             'serp_features' => null, 'cost' => 0.0006, 'posted_at' => now(), 'completed_at' => now(),
             ...$state,
         ]);
+    }
+
+    /** A competitor saved directly (no backfill). */
+    protected function makeCompetitor(Site $site, string $domain, array $state = []): SiteCompetitor
+    {
+        return SiteCompetitor::query()->create(['site_id' => $site->id, 'domain' => $domain, 'name' => $domain, 'is_active' => true, ...$state]);
+    }
+
+    /**
+     * rank_checks.organic_domains from position => host (gaps null).
+     *
+     * @param  array<int, string>  $hosts
+     * @return list<?string>
+     */
+    protected function hosts(array $hosts): array
+    {
+        $out = [];
+        for ($p = 1; $p <= ($hosts === [] ? 0 : max(array_keys($hosts))); $p++) {
+            $out[] = $hosts[$p] ?? null;
+        }
+
+        return $out;
     }
 
     /**

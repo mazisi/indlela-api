@@ -20,6 +20,7 @@ enum EmailTemplateType: string
     case AddedToWorkspace = 'added_to_workspace';
     case WorkspaceCreated = 'workspace_created';
     case ClientReport = 'client_report';
+    case CompetitorAlert = 'competitor_alert';
 
     public function label(): string
     {
@@ -30,6 +31,7 @@ enum EmailTemplateType: string
             self::AddedToWorkspace => 'Added to the workspace (existing account)',
             self::WorkspaceCreated => 'Welcome after sign-up',
             self::ClientReport => 'Client report (white-label)',
+            self::CompetitorAlert => 'Competitor alert',
         };
     }
 
@@ -42,6 +44,7 @@ enum EmailTemplateType: string
             self::AddedToWorkspace => 'Sent when someone who already has an account is added to the workspace.',
             self::WorkspaceCreated => 'Sent to the new Owner when they sign up and create a workspace.',
             self::ClientReport => 'Sends an SEO report to a client, from your workspace\'s name, with the PDF attached and a button to the online report. Monthly when a schedule is set.',
+            self::CompetitorAlert => 'Sent each morning to a site\'s competitor alert recipients when a competitor moved ahead of the site on a key keyword, with a button to the site\'s Competitors tab.',
         };
     }
 
@@ -103,6 +106,15 @@ enum EmailTemplateType: string
                 'message' => 'The personal message typed when sending, if any',
                 'url' => 'The online report link (also rendered as the button)',
             ],
+            self::CompetitorAlert => [
+                'workspace' => 'Your workspace (e.g. Acme Digital)',
+                'client' => 'The client (e.g. Karoo Coffee)',
+                'site' => 'The website (e.g. karoocoffee.co.za)',
+                'count' => 'How many alerts (e.g. 3 alerts)',
+                'alerts' => 'The alerts as a table: keyword, competitor, their position and yours, before and now (e.g. coffee beans: rival.co.za 3 (was 8), you 5 (was 4))',
+                'app_name' => 'The application name',
+                'url' => 'The link to the site\'s Competitors tab (also rendered as the button)',
+            ],
         };
     }
 
@@ -114,6 +126,7 @@ enum EmailTemplateType: string
             self::UserInvited => 'Choose your password',
             self::AddedToWorkspace, self::WorkspaceCreated => 'Sign in',
             self::ClientReport => 'View the report online',
+            self::CompetitorAlert => 'Open competitors',
             self::LoginPin => null,
         };
     }
@@ -127,6 +140,7 @@ enum EmailTemplateType: string
             self::AddedToWorkspace => 'You have been added to {{workspace}} on {{app_name}}',
             self::WorkspaceCreated => 'Welcome to {{app_name}}: {{workspace}} is ready',
             self::ClientReport => 'Your {{month}} SEO report from {{workspace}}',
+            self::CompetitorAlert => 'Competitor alert for {{site}}: {{count}}',
         };
     }
 
@@ -168,6 +182,12 @@ enum EmailTemplateType: string
                 <p>Open the full report online with the button below. The PDF is attached.</p>
                 <p>Kind regards,<br>{{workspace}}</p>
                 HTML,
+            self::CompetitorAlert => <<<'HTML'
+                <p>Hello,</p>
+                <p>A competitor moved ahead of <strong>{{site}}</strong> ({{client}}) on a key keyword: {{count}} since the last email.</p>
+                {{alerts}}
+                <p>Open the site's Competitors tab for the full head-to-head.</p>
+                HTML,
         };
     }
 
@@ -177,6 +197,7 @@ enum EmailTemplateType: string
         return match ($this) {
             self::WorkspaceCreated => 'The new Owner',
             self::ClientReport => 'The report recipients',
+            self::CompetitorAlert => 'The site\'s alert recipients',
             default => 'The user',
         };
     }

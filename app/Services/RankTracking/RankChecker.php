@@ -26,6 +26,7 @@ class RankChecker
         private readonly SerpApi $api,
         private readonly RankSpend $spend,
         private readonly RankLimits $limits,
+        private readonly CompetitorTracker $competitors,
     ) {}
 
     /** 409 rank_checks_paused while the platform's DataForSEO account isn't set up. */
@@ -112,7 +113,7 @@ class RankChecker
                 // Any cost already paid today stays in the ledger; the live check's is added.
                 $check->forceFill([
                     'mode' => RankCheck::LIVE, 'status' => RankCheck::PENDING, 'task_id' => null, 'position' => null, 'url' => null,
-                    'matching_urls' => null, 'serp_features' => null, 'result_count' => null, 'error' => null,
+                    'matching_urls' => null, 'serp_features' => null, 'result_count' => null, 'organic_domains' => null, 'error' => null,
                     'posted_at' => now(), 'completed_at' => null, 'live_requests' => (int) $check->live_requests + 1,
                 ])->save();
 
@@ -151,7 +152,7 @@ class RankChecker
         return $task;
     }
 
-    /** Store a finished SERP on its check (status done). */
+    /** Store a finished SERP on its check (status done), then the site's competitors' positions in it. */
     public function complete(RankCheck $check, ?array $result, float $cost): void
     {
         $keyword = $check->keyword()->with(['site' => fn ($q) => $q->withoutGlobalScope('workspace')])->first();
@@ -164,6 +165,8 @@ class RankChecker
             'error' => null,
             'completed_at' => now(),
         ])->save();
+
+        $this->competitors->record($check);
     }
 
     public function fail(RankCheck $check, string $error, float $cost = 0.0): void

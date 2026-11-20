@@ -29,6 +29,7 @@ class RankKeywordResource extends JsonResource
             'weekly_day' => $this->weekly_day,
             'tags' => $this->tags ?? [],
             'is_active' => $this->is_active,
+            'is_key' => (bool) $this->is_key,
             'position' => self::int($this->position),
             'previous_position' => self::int($this->previous_position),
             'change_1d' => self::int($this->change_1d),

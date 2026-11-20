@@ -17,6 +17,9 @@ namespace App\Services\RankTracking;
  *   (any URL or domain inside the element, e.g. an AI overview's references).
  *   AI overviews come as a top-level `ai_overview` item or nested in a
  *   knowledge graph (`knowledge_graph_ai_overview_item`).
+ * - organic_domains: every organic result's host by position (index i =
+ *   position i + 1, bare host, null where the depth has no organic item;
+ *   trailing gaps dropped), for competitor tracking. [] when nothing ranks.
  */
 final class SerpParser
 {
@@ -28,7 +31,7 @@ final class SerpParser
 
     /**
      * @param  array<string, mixed>|null  $result  tasks[0].result[0]
-     * @return array{position: ?int, url: ?string, matching_urls: list<array{url: string, position: int}>, serp_features: array<string, array<string, bool>>, result_count: ?int}
+     * @return array{position: ?int, url: ?string, matching_urls: list<array{url: string, position: int}>, serp_features: array<string, array<string, bool>>, result_count: ?int, organic_domains: list<?string>}
      */
     public static function parse(?array $result, string $siteDomain, int $depth = 100): array
     {
@@ -43,6 +46,8 @@ final class SerpParser
 
         /** @var array<string, int> $urls url => best position */
         $urls = [];
+        /** @var array<int, string> $hosts position => host (the first organic item there) */
+        $hosts = [];
         foreach ($result['items'] ?? [] as $item) {
             if (! is_array($item)) {
                 continue;
@@ -54,6 +59,10 @@ final class SerpParser
                 $url = (string) ($item['url'] ?? '');
                 if ($rank >= 1 && $rank <= $depth && $url !== '' && self::isOurs($item['domain'] ?? null, $url, $domain)) {
                     $urls[$url] = min($urls[$url] ?? PHP_INT_MAX, $rank);
+                }
+                $host = self::hostOf($item['domain'] ?? null, $url);
+                if ($rank >= 1 && $rank <= $depth && $host !== '' && ! isset($hosts[$rank])) {
+                    $hosts[$rank] = $host;
                 }
 
                 continue;
@@ -80,6 +89,10 @@ final class SerpParser
         }
 
         $count = $result['se_results_count'] ?? null;
+        $organic = [];
+        for ($rank = 1; $rank <= ($hosts === [] ? 0 : max(array_keys($hosts))); $rank++) {
+            $organic[] = $hosts[$rank] ?? null;
+        }
 
         return [
             'position' => $matching[0]['position'] ?? null,
@@ -87,6 +100,7 @@ final class SerpParser
             'matching_urls' => $matching,
             'serp_features' => $features,
             'result_count' => is_numeric($count) ? (int) $count : null,
+            'organic_domains' => $organic,
         ];
     }
 
@@ -98,13 +112,26 @@ final class SerpParser
 
     private static function isOurs(mixed $itemDomain, string $url, string $domain): bool
     {
-        $host = is_string($itemDomain) && $itemDomain !== '' ? $itemDomain : (string) parse_url($url, PHP_URL_HOST);
+        $host = self::hostOf($itemDomain, $url);
         if ($host === '' || $domain === '') {
             return false;
         }
-        $host = self::bareHost($host);
 
+        return self::matches($host, $domain);
+    }
+
+    /** A bare host is the domain or a subdomain of it. */
+    public static function matches(string $host, string $domain): bool
+    {
         return $host === $domain || str_ends_with($host, '.'.$domain);
+    }
+
+    /** An item's bare host: its `domain`, else its URL's host ('' when neither). */
+    private static function hostOf(mixed $itemDomain, string $url): string
+    {
+        $host = is_string($itemDomain) && $itemDomain !== '' ? $itemDomain : (string) parse_url($url, PHP_URL_HOST);
+
+        return $host === '' ? '' : self::bareHost($host);
     }
 
     /** Any `url` or `domain` anywhere inside $element points at the site. */

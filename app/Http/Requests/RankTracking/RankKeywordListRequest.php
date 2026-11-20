@@ -28,6 +28,7 @@ class RankKeywordListRequest extends FormRequest
             'location' => ['nullable', 'string', 'max:200'],
             'tag' => ['nullable', 'string', 'max:30'],
             'bucket' => ['nullable', Rule::in(RankReports::BUCKETS)],
+            'is_key' => ['nullable', 'boolean'],
             'sort' => ['nullable', Rule::in([...RankReports::SORTS, ...array_map(fn ($s) => "-{$s}", RankReports::SORTS)])],
             'page' => ['nullable', 'integer', 'min:1'],
             'per_page' => ['nullable', 'integer', 'min:10', 'max:100'],

@@ -8,6 +8,7 @@ use App\Models\Site;
 use App\Models\SiteAudit;
 use App\Models\Workspace;
 use App\Services\LocalGrid\GridScanner;
+use App\Services\RankTracking\CompetitorAlertDigest;
 use App\Services\RankTracking\RankChecker;
 use App\Services\RankTracking\RankLocations;
 use App\Services\RankTracking\RankSpend;
@@ -136,6 +137,17 @@ Artisan::command('rank-tracking:collect', function (SerpApi $api, RankChecker $c
 })->purpose('Collect finished rank checks from DataForSEO');
 
 Schedule::command('rank-tracking:collect')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+
+// Competitor alerts: per site with alert recipients, one email of the alerts
+// (a competitor moved ahead on a key keyword) not emailed yet, at most 7 days
+// old, then marks them emailed. Spans workspaces; each site's email is built
+// in its own. Morning SA, after the overnight checks are collected.
+Artisan::command('rank-tracking:competitor-alerts', function (CompetitorAlertDigest $digest) {
+    ['sites' => $sites, 'alerts' => $alerts] = $digest->send();
+    $this->info("Emailed {$alerts} competitor alert(s) for {$sites} site(s).");
+})->purpose('Email each site\'s new competitor alerts to its recipients');
+
+Schedule::command('rank-tracking:competitor-alerts')->dailyAt('07:30')->timezone('Africa/Johannesburg')->withoutOverlapping()->onOneServer();
 
 // Downloads DataForSEO's location list (~270k places; the memory limit is
 // raised inside). --if-stale only when it's missing or older than 30 days.
