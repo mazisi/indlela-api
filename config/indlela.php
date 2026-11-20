@@ -31,6 +31,11 @@ return [
         'invite_ttl_hours' => (int) env('AUTH_INVITE_TTL_HOURS', 72),
     ],
 
+    // The platform (Indlela staff) workspace, by slug: the only workspace where
+    // Platform › Usage (view_platform_usage, cross-workspace figures) exists.
+    // Empty = no platform workspace: the page is off everywhere.
+    'platform_workspace' => env('INDLELA_PLATFORM_WORKSPACE') ?: null,
+
     // Who may open /horizon outside the local environment (comma-separated emails).
     'horizon_admin_emails' => env('HORIZON_ADMIN_EMAILS', ''),
 
@@ -157,6 +162,56 @@ return [
             'poor_score' => 50,
             'good_score' => 90,
         ],
+    ],
+
+    /*
+    | Rank tracking through DataForSEO's SERP API (credentials in
+    | config/services.php `dataforseo`). Prices are USD per check at depth
+    | 100 (one check = one keyword x location x device x day); they drive the
+    | usage page's estimates, the real cost comes back from DataForSEO.
+    */
+    'rank_tracking' => [
+        // Standard queue (overnight checks, priority 1) and Live mode ("check now").
+        'price_standard' => (float) env('RANK_PRICE_STANDARD', 0.0006),
+        'price_live' => (float) env('RANK_PRICE_LIVE', 0.002),
+        // Results asked for per SERP: positions beyond it count as "not in the top 100".
+        'depth' => 100,
+        // Tasks per task_post call (DataForSEO's maximum is 100).
+        'batch_size' => 100,
+        // Beta limits (per workspace; pricing plans come later). Keywords = active
+        // keyword x location x device combinations across the workspace's sites;
+        // workspaces.rank_keyword_limit overrides it for one workspace.
+        'workspace_keyword_limit' => (int) env('RANK_WORKSPACE_KEYWORD_LIMIT', 500),
+        // "Check now" requests a workspace may make a calendar day (SAST); failed ones count too (they're billed).
+        'check_now_daily_limit' => (int) env('RANK_CHECK_NOW_DAILY_LIMIT', 20),
+        // Platform-wide DataForSEO spend a calendar month (USD, every workspace): posting stops
+        // and "check now" pauses at it. 0 or empty = no cap. Never shown to workspaces.
+        'monthly_spend_cap_usd' => (float) env('RANK_MONTHLY_SPEND_CAP_USD', 50),
+        // The month's spend is cached this many seconds for the usage endpoint (posting reads it fresh).
+        'spend_cache_seconds' => 60,
+        // Platform › Usage: the provider's account balance is cached this many seconds.
+        'balance_cache_seconds' => 600,
+        // Keyword ids in one bulk request.
+        'max_bulk_ids' => 1000,
+        // Keywords added in one request (before the location/device combinations).
+        'max_keywords_per_request' => 200,
+        'max_locations_per_request' => 5,
+        // A suburb is a coordinate "lat,lng,radius": DataForSEO wants the radius in mm (199-199999).
+        'coordinate_radius' => (int) env('RANK_COORDINATE_RADIUS', 20000),
+        // Standard checks not collected after this many hours are marked failed.
+        'pending_timeout_hours' => 24,
+        // DataForSEO's location list (~270k places, ~400 MB to load, a few minutes) is downloaded
+        // into rank_locations by a queued job on the long connection, never during a request,
+        // and refreshed after this many days.
+        'locations_refresh_days' => 30,
+        'locations_memory_limit' => env('RANK_LOCATIONS_MEMORY_LIMIT', '1024M'),
+        'locations_queue_connection' => env('RANK_LOCATIONS_QUEUE_CONNECTION', 'redis-long'),
+        // Location search ranks this country's places first.
+        'home_country' => 'ZA',
+        // Seconds a live check may take (DataForSEO's own limit is 120 s); below the job's timeout.
+        'live_timeout' => 75,
+        // Collection and "check now" jobs are small: the default redis connection (Horizon's supervisor-1).
+        'queue_connection' => env('RANK_QUEUE_CONNECTION', 'redis'),
     ],
 
 ];

@@ -1,15 +1,22 @@
 <?php
 
 use App\Exceptions\SiteAuditException;
+use App\Jobs\CollectRankResults;
 use App\Jobs\SyncSearchConsole;
 use App\Models\GoogleConnection;
 use App\Models\Site;
 use App\Models\SiteAudit;
 use App\Models\Workspace;
+use App\Services\RankTracking\RankChecker;
+use App\Services\RankTracking\RankLocations;
+use App\Services\RankTracking\RankSpend;
+use App\Services\RankTracking\SerpApi;
 use App\Services\SiteAudit\SiteAudits;
 use App\Support\CurrentWorkspace;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schedule;
 use Illuminate\Support\Facades\Storage;
 
@@ -81,3 +88,59 @@ Artisan::command('site-audit:run-scheduled', function (SiteAudits $audits, Curre
 
 // Night-time SA: quiet for the clients' servers.
 Schedule::command('site-audit:run-scheduled')->dailyAt('02:00')->withoutOverlapping()->onOneServer();
+
+// Rank tracking: a pending check for every active keyword due today (daily,
+// weekly on its weekday, or never checked) with no check today, posted to
+// DataForSEO's Standard queue in batches of 100 (one job per workspace and
+// batch). Spans workspaces; each job carries its own. Safe to re-run: a
+// keyword gets one check a day. Stops at the platform's monthly spend cap
+// (rank_tracking.monthly_spend_cap_usd): nothing is created once it's
+// reached, and each batch posts only what still fits (PostRankTasks).
+Artisan::command('rank-tracking:post-checks', function (SerpApi $api, RankChecker $checker, RankSpend $spend) {
+    if (! $api->configured()) {
+        Log::warning('Rank tracking: DataForSEO is not configured (DATAFORSEO_LOGIN, DATAFORSEO_PASSWORD); no checks posted.');
+        $this->warn('DataForSEO is not configured; nothing posted.');
+
+        return;
+    }
+
+    if ($spend->checksThatFit((float) config('indlela.rank_tracking.price_standard')) === 0) {
+        Log::warning('Rank tracking: the monthly spend cap is reached; no checks posted.', ['spend_usd' => $spend->fresh(), 'cap_usd' => $spend->cap()]);
+        Cache::put('rank-spend-cap-warned:'.today()->toDateString(), true, now()->endOfDay());
+        $this->warn('The monthly spend cap is reached; nothing posted.');
+
+        return;
+    }
+
+    ['checks' => $checks, 'batches' => $batches] = $checker->scheduleDue(today());
+    $this->info("Queued {$checks} rank check(s) in {$batches} batch(es).");
+})->purpose('Create today\'s rank checks and post them to DataForSEO');
+
+// Overnight SA: results are ready by morning (Standard queue).
+Schedule::command('rank-tracking:post-checks')->dailyAt('01:00')->withoutOverlapping()->onOneServer();
+
+// Fails checks pending past the timeout, then queues the collection of
+// finished DataForSEO tasks (tasks_ready → one FetchRankResult per task).
+Artisan::command('rank-tracking:collect', function (SerpApi $api, RankChecker $checker) {
+    $failed = $checker->failStale();
+    if (! $api->configured()) {
+        $this->warn("DataForSEO is not configured; nothing collected ({$failed} stale check(s) failed).");
+
+        return;
+    }
+
+    CollectRankResults::dispatch();
+    $this->info("Queued the rank result collection; {$failed} stale check(s) failed.");
+})->purpose('Collect finished rank checks from DataForSEO');
+
+Schedule::command('rank-tracking:collect')->everyFiveMinutes()->withoutOverlapping()->onOneServer();
+
+// Downloads DataForSEO's location list (~270k places; the memory limit is
+// raised inside). --if-stale only when it's missing or older than 30 days.
+// The location search never downloads: it queues RefreshRankLocations.
+Artisan::command('rank-tracking:locations {--if-stale}', function (RankLocations $locations) {
+    $stored = $this->option('if-stale') ? $locations->refreshIfStale() : $locations->refresh();
+    $this->info($stored === null ? 'The location list is up to date.' : "Stored {$stored} location(s).");
+})->purpose('Refresh the DataForSEO location list');
+
+Schedule::command('rank-tracking:locations --if-stale')->weeklyOn(0, '03:00')->withoutOverlapping()->onOneServer();

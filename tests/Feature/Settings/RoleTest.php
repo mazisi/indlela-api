@@ -44,7 +44,7 @@ class RoleTest extends TestCase
 
         $this->assertSame([Role::OWNER, Role::ANALYST, Role::CLIENT, Role::MANAGER], array_column($response->json('roles'), 'name'));
         $this->assertTrue($response->json('roles.0.is_system'));
-        $this->assertCount(count(Permissions::all()), $response->json('roles.0.permissions'));
+        $this->assertCount(count(Permissions::forWorkspace($this->workspace())), $response->json('roles.0.permissions'));
 
         $analyst = collect($response->json('roles'))->firstWhere('name', 'Analyst');
         $this->assertSame(1, $analyst['users_count']);
@@ -70,7 +70,7 @@ class RoleTest extends TestCase
         $this->assertTrue($this->userCan($client, 'view_reports'));
         $this->assertFalse($this->userCan($client, 'create_clients_sites'));
         $this->assertFalse($this->userCan($client, 'view_settings_email_templates'));
-        foreach (Permissions::all() as $name) {
+        foreach (Permissions::forWorkspace($this->workspace()) as $name) {
             $this->assertTrue($this->userCan($this->owner, $name), $name);
         }
     }
@@ -201,7 +201,7 @@ class RoleTest extends TestCase
         $this->actingAs($this->owner, 'sanctum')->deleteJson("/api/settings/roles/{$role->id}")->assertForbidden();
 
         $this->assertSame(Role::OWNER, $role->fresh()->name);
-        $this->assertCount(count(Permissions::all()), $role->fresh()->permissions);
+        $this->assertCount(count(Permissions::forWorkspace($this->workspace())), $role->fresh()->permissions);
     }
 
     public function test_owner_only_pages_still_cannot_be_given_to_another_role(): void

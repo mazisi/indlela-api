@@ -113,6 +113,66 @@ php artisan db:seed --class=AuditDemoSeeder
 
 Builds two finished audits (two weeks ago and yesterday) for `demo.indlela.local` in the first workspace (creating the site if `GscDemoSeeder` hasn't), with issues of every severity, a comparison and vitals. Re-running replaces only that site's audits. Not part of `db:seed`.
 
+## Rank tracking
+
+Tracks Google positions (top 100) of a site's keywords by country, city or suburb (a coordinate), on desktop and mobile, daily or weekly, through the **DataForSEO SERP API**. Records the ranking URL (two of the site's pages in the top 100 = cannibalisation) and SERP features (featured snippet, map pack, AI overview, …). Endpoints, parsing rules and the report maths: `docs/API.md` › Rank tracking; numbers in `config/indlela.php` under `rank_tracking`.
+
+### DataForSEO account (platform-level)
+
+DataForSEO is **one platform account** that the company pays for. Workspaces (agencies, SMEs) never configure it and never see its cost, balance or name: they see only their limits and, when checks are off, "Rank checks are paused for now".
+
+1. Sign up at dataforseo.com; the dashboard › **API Access** shows the API login and password (not your dashboard password).
+2. Put them in `.env` as `DATAFORSEO_LOGIN` and `DATAFORSEO_PASSWORD`.
+3. `DATAFORSEO_SANDBOX=true` (the default) calls `sandbox.dataforseo.com`: free, but answers with sample SERPs (positions are not real). Set it to `false` for real, billed checks, and keep the balance topped up in the DataForSEO dashboard.
+
+Without credentials the app still works: keywords can be added, "check now" and the location search answer 409 `rank_checks_paused`, and the scheduled jobs skip.
+
+### Costs (platform-only)
+
+| Mode | When | Price (USD) | Per check |
+|---|---|---|---|
+| Standard queue | Overnight checks (`rank-tracking:post-checks`, 01:00) | $0.60 per 1,000 | $0.0006 |
+| Live | "Check now" in the app | $2.00 per 1,000 | $0.002 |
+
+One check = one keyword × location × device × day, top 100 results. A keyword checked daily costs about 30 × $0.0006 = $0.018 a month; weekly (the default) about $0.0026. No hourly tracking. `rank_checks.cost` records what DataForSEO charged; it is never shown to workspaces.
+
+### Beta limits
+
+Pricing plans come later; until then usage is capped so one workspace can't run up the bill. All in `.env`:
+
+| Variable | Default | What |
+|---|---|---|
+| `RANK_WORKSPACE_KEYWORD_LIMIT` | 500 | Active keywords (keyword × location × device) per workspace. `workspaces.rank_keyword_limit` overrides it for one workspace (null = the default). |
+| `RANK_CHECK_NOW_DAILY_LIMIT` | 20 | "Check now" requests per workspace per day (SAST); failed ones count. Over it: 429. |
+| `RANK_MONTHLY_SPEND_CAP_USD` | 50 | Platform-wide DataForSEO spend per calendar month, all workspaces together. At the cap overnight posting stops (what fits is posted, the rest skipped with a log warning) and "check now" pauses. 0 or empty = no cap. |
+
+Workspaces see their counts and limits, and whether checks are paused, in `GET /api/rank-tracking/usage`.
+
+### Running it
+
+- **Horizon and the scheduler must run**: `php artisan horizon` and, locally, `php artisan schedule:work` (production: the usual `schedule:run` cron). `rank-tracking:post-checks` (daily 01:00) posts the day's checks to the Standard queue; `rank-tracking:collect` (every 5 minutes) collects finished ones; both run on the default `redis` queue.
+- Run them by hand: `php artisan rank-tracking:post-checks`, `php artisan rank-tracking:collect`. `php artisan rank-tracking:locations` downloads DataForSEO's location list (~270k places, a few minutes; run it once after adding credentials). It always comes from DataForSEO's live host, which is free, because the sandbox only has a one-country sample. Afterwards a weekly schedule refreshes it when it is over 30 days old; the location search never downloads it, it queues the download and says "Locations are still loading".
+
+### Demo data (no DataForSEO needed)
+
+```bash
+php artisan db:seed --class=RankDemoSeeder
+```
+
+Adds 60 keywords (10 phrases × South Africa, Johannesburg and a Sandton coordinate × desktop and mobile) with 90 days of results to `demo.indlela.local` in the first workspace: trends, this week's gains and drops, keywords outside the top 100, URL switches (cannibalisation) and SERP features. Re-running replaces only that site's keywords. Not part of `db:seed`. The demo keywords are active, so once DataForSEO is configured the nightly job checks them too.
+
+## Platform usage (Indlela staff)
+
+**Platform › Usage** shows the company's DataForSEO spend (this month, pending, against the cap, the account balance) and every workspace's rank-tracking usage, so staff can set prices and raise a beta tester's keyword limit. Customers never see it: it exists only in one **platform workspace** (endpoints and rules: `docs/API.md` › Platform).
+
+To make someone a superuser:
+
+1. Set `INDLELA_PLATFORM_WORKSPACE` in `.env` to the slug of the staff workspace (e.g. `indlela-demo`; `php artisan tinker --execute='echo App\Models\Workspace::pluck("slug", "id")'` lists them). Empty = the page is off everywhere.
+2. Run `php artisan db:seed --class=RolePermissionSeeder` (idempotent). It gives that workspace's Owner `view_platform_usage`, adds a **Superuser** role there (everything a non-Owner role may hold, plus Platform › Usage, all clients) and takes the permission off any role in other workspaces.
+3. In that workspace, open **Settings › Users** and give the person the **Superuser** role (or tick Platform › Usage on another role in Settings › Roles).
+
+They see the page while acting in the platform workspace; switching to another workspace hides it.
+
 ## Tests
 
 ```bash

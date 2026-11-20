@@ -24,7 +24,10 @@ final class AccountState
         return [
             'user' => new UserLoginResource($user),
             'roles' => $user->getRoleNames(),
-            'permissions' => $user->getAllPermissions()->pluck('name')->values(),
+            // Platform pages only ever in the platform workspace, whatever a role holds.
+            'permissions' => $user->getAllPermissions()->pluck('name')
+                ->when(! PlatformWorkspace::is($current), fn ($names) => $names->diff(Permissions::platformOnly()))
+                ->values(),
             'workspace' => $current ? new WorkspaceResource($current) : null,
             'workspaces' => self::workspaces($user),
         ];

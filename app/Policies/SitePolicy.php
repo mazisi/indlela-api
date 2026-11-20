@@ -67,6 +67,18 @@ class SitePolicy
         return $this->allowSite($user, 'update_site_audit', $site);
     }
 
+    /** Rank tracking: the site's keywords and reports. */
+    public function viewRankTracking(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'view_rank_tracking', $site);
+    }
+
+    /** Rank tracking: add, change or remove keywords, "check now". */
+    public function manageRankTracking(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'update_rank_tracking', $site);
+    }
+
     public function allowSite(User $user, string $permission, Site $site): Response
     {
         if (! $this->inCurrentWorkspace($site)) {

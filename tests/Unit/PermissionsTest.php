@@ -22,7 +22,7 @@ class PermissionsTest extends TestCase
     {
         $this->assertSame(
             ['dashboard', 'clients_clients', 'clients_sites', 'search_console', 'site_audit', 'rank_tracking', 'reports',
-                'settings_workspace', 'settings_users', 'settings_roles', 'settings_login_history', 'settings_email_templates'],
+                'settings_workspace', 'settings_users', 'settings_roles', 'settings_login_history', 'settings_email_templates', 'platform_usage'],
             array_keys(Permissions::resources()),
         );
     }
@@ -34,6 +34,15 @@ class PermissionsTest extends TestCase
         $this->assertNotContains('update_settings_roles', Permissions::grantable());
         $this->assertNotContains('update_settings_workspace', Permissions::grantable());
         $this->assertContains('update_settings_email_templates', Permissions::grantable());
+    }
+
+    public function test_platform_pages_are_neither_grantable_nor_owner_only(): void
+    {
+        $this->assertContains('view_platform_usage', Permissions::all());
+        $this->assertSame(['view_platform_usage'], Permissions::platformOnly());
+        $this->assertNotContains('view_platform_usage', Permissions::grantable());
+        $this->assertNotContains('view_platform_usage', Permissions::adminOnly());
+        $this->assertNotContains('view_platform_usage', Permissions::forGroupLevels(['platform' => 'approve']));
     }
 
     public function test_every_action_brings_view_with_it(): void

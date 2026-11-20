@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\Models\Workspace;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -37,6 +38,13 @@ final class Permissions
     public const ADMIN_ONLY = ['settings_users', 'settings_roles', 'settings_login_history', 'settings_workspace'];
 
     /**
+     * Indlela staff pages: they exist only in the platform workspace
+     * (PlatformWorkspace, config indlela.platform_workspace). Everywhere else
+     * they aren't in Owner's set, the Roles grid, a saved role or /me.
+     */
+    public const PLATFORM_ONLY = ['platform_usage'];
+
+    /**
      * group => [label, [resource => [label, actions]]], in sidebar order.
      *
      * @var array<string, array{0: string, 1: array<string, array{0: string, 1: list<string>}>}>
@@ -51,7 +59,7 @@ final class Permissions
         'search_console' => ['Search Console', ['search_console' => ['Search Console', self::CRUD]]],
         // MVP 3: crawls and PageSpeed. Update = run an audit now, cancel it, audit settings (create/delete unused so far).
         'site_audit' => ['Site audit', ['site_audit' => ['Site audit', self::CRUD]]],
-        // MVP 1: DataForSEO. Create = add keywords or "check now" (Live mode, costs more).
+        // MVP 1: DataForSEO. Update = add, change or remove keywords and "check now" (Live mode, costs more); create/delete unused so far.
         'rank_tracking' => ['Rank tracking', ['rank_tracking' => ['Rank tracking', self::CRUD]]],
         // MVP 4: white-label reports. Approve = approve and send (never auto-sent).
         'reports' => ['Reports', ['reports' => ['Reports', self::CRUDA]]],
@@ -62,6 +70,8 @@ final class Permissions
             'settings_login_history' => ['Login history', self::V],
             'settings_email_templates' => ['Email templates', ['view', 'update']],
         ]],
+        // Indlela staff only, in the platform workspace: DataForSEO spend and every workspace's usage.
+        'platform' => ['Platform', ['platform_usage' => ['Usage', self::V]]],
     ];
 
     /** @return array<string, array{group: string, label: string, actions: list<string>}> resource => details */
@@ -90,16 +100,51 @@ final class Permissions
         return $names;
     }
 
-    /** @return list<string> the permissions a role other than Owner may hold */
+    /** @return list<string> the permissions a role other than Owner may hold in any workspace (never the platform pages) */
     public static function grantable(): array
     {
-        return array_values(array_filter(self::all(), fn (string $name) => ! in_array(self::resourceOf($name), self::ADMIN_ONLY, true)));
+        return array_values(array_filter(self::all(), fn (string $name) => ! in_array(self::resourceOf($name), [...self::ADMIN_ONLY, ...self::PLATFORM_ONLY], true)));
+    }
+
+    /** @return list<string> every permission that exists in $workspace (Owner's set): the platform pages only in the platform workspace */
+    public static function forWorkspace(?Workspace $workspace): array
+    {
+        return PlatformWorkspace::is($workspace) ? self::all() : array_values(array_diff(self::all(), self::platformOnly()));
+    }
+
+    /** @return list<string> what a role other than Owner may hold in $workspace */
+    public static function grantableIn(?Workspace $workspace): array
+    {
+        return PlatformWorkspace::is($workspace) ? [...self::grantable(), ...self::platformOnly()] : self::grantable();
+    }
+
+    /** @return list<string> the platform pages' permissions */
+    public static function platformOnly(): array
+    {
+        return array_values(array_filter(self::all(), fn (string $name) => in_array(self::resourceOf($name), self::PLATFORM_ONLY, true)));
+    }
+
+    /** @return array<string, array{0: string, 1: array<string, array{0: string, 1: list<string>}>}> GROUPS as $workspace has them (the Roles grid) */
+    public static function groupsFor(?Workspace $workspace): array
+    {
+        if (PlatformWorkspace::is($workspace)) {
+            return self::GROUPS;
+        }
+        $groups = [];
+        foreach (self::GROUPS as $key => [$label, $resources]) {
+            $resources = array_diff_key($resources, array_flip(self::PLATFORM_ONLY));
+            if ($resources !== []) {
+                $groups[$key] = [$label, $resources];
+            }
+        }
+
+        return $groups;
     }
 
     /** @return list<string> the permissions only Owners hold */
     public static function adminOnly(): array
     {
-        return array_values(array_diff(self::all(), self::grantable()));
+        return array_values(array_filter(self::all(), fn (string $name) => in_array(self::resourceOf($name), self::ADMIN_ONLY, true)));
     }
 
     public static function resourceOf(string $permission): string

@@ -44,8 +44,9 @@ class RoleController extends Controller
 
         return response()->json([
             'roles' => RoleResource::collection($roles),
-            // The grid: sidebar groups, one row per page, with the actions it has.
-            'groups' => collect(Permissions::GROUPS)->map(fn (array $group, string $key) => [
+            // The grid: sidebar groups, one row per page, with the actions it has
+            // (the Platform group only in the platform workspace).
+            'groups' => collect(Permissions::groupsFor($this->current->get()))->map(fn (array $group, string $key) => [
                 'key' => $key,
                 'label' => $group[0],
                 'resources' => collect($group[1])->map(fn (array $resource, string $resourceKey) => [

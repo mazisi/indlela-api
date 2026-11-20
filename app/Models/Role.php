@@ -29,6 +29,9 @@ class Role extends SpatieRole
     /** Read-only login for an agency's client, limited to their assigned clients. */
     public const CLIENT = 'Client';
 
+    /** Indlela staff, in the platform workspace only (WorkspaceProvisioner): editable like Manager. */
+    public const SUPERUSER = 'Superuser';
+
     // Roles the user CRUD flows guard (last Owner) and Settings › Roles refuses to change.
     const PROTECTED_ROLES = [self::OWNER];
 

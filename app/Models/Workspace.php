@@ -22,6 +22,11 @@ class Workspace extends Model
 
     protected $fillable = ['name', 'slug', 'logo_path'];
 
+    protected function casts(): array
+    {
+        return ['rank_keyword_limit' => 'integer'];
+    }
+
     protected static function booted(): void
     {
         static::creating(function (Workspace $workspace) {
@@ -44,6 +49,12 @@ class Workspace extends Model
     public function logoUrl(): ?string
     {
         return $this->logo_path ? Storage::url($this->logo_path) : null;
+    }
+
+    /** Active rank-tracking keywords this workspace may have: its own limit, else the beta default. */
+    public function rankKeywordLimit(): int
+    {
+        return $this->rank_keyword_limit ?? (int) config('indlela.rank_tracking.workspace_keyword_limit');
     }
 
     public function users(): BelongsToMany

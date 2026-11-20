@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Settings;
 
+use App\Support\CurrentWorkspace;
 use App\Support\Permissions;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -16,7 +17,7 @@ class RolePermissionsRequest extends FormRequest
     /**
      * The role's full set of permissions. Only catalogue permissions a role
      * may hold; Users and access, Roles, Login history and Workspace stay
-     * with Owners.
+     * with Owners, and the platform pages exist only in the platform workspace.
      *
      * @return array<string, mixed>
      */
@@ -24,7 +25,7 @@ class RolePermissionsRequest extends FormRequest
     {
         return [
             'permissions' => ['present', 'array', 'max:500'],
-            'permissions.*' => ['string', 'distinct', Rule::in(Permissions::grantable())],
+            'permissions.*' => ['string', 'distinct', Rule::in(Permissions::grantableIn(app(CurrentWorkspace::class)->get()))],
         ];
     }
 
