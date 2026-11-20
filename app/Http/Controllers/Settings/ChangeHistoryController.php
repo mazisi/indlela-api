@@ -11,6 +11,8 @@ use App\Models\RankKeyword;
 use App\Models\Report;
 use App\Models\ReportSchedule;
 use App\Models\Site;
+use App\Models\SiteCompetitor;
+use App\Models\SiteCompetitorSetting;
 use App\Services\ChangeHistory\UndoChange;
 use App\Support\ChangeHistory;
 use App\Support\CurrentWorkspace;
@@ -106,7 +108,7 @@ class ChangeHistoryController extends Controller
 
     /**
      * This workspace's entries on these pages. A user limited to some clients
-     * sees client records (clients, sites, keywords, grids, reports, schedules) of
+     * sees client records (clients, sites, keywords, competitors, grids, reports, schedules) of
      * those clients only, deleted ones included.
      */
     private function visible(Request $request, array $pages): Builder
@@ -123,6 +125,8 @@ class ChangeHistoryController extends Controller
             'clients' => Client::withTrashed()->whereKey($clientIds),
             'sites' => Site::withTrashed()->whereIn('client_id', $clientIds),
             'rank_keywords' => RankKeyword::withTrashed()->whereIn('site_id', $sites),
+            'site_competitors' => SiteCompetitor::withTrashed()->whereIn('site_id', $sites),
+            'site_competitor_settings' => SiteCompetitorSetting::query()->whereIn('site_id', $sites),
             'map_grids' => MapGrid::withTrashed()->whereIn('site_id', $sites),
             'reports' => Report::withTrashed()->whereIn('client_id', $clientIds),
             'report_schedules' => ReportSchedule::query()->whereIn('site_id', $sites),

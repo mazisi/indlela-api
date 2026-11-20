@@ -10,8 +10,11 @@ use App\Models\RankKeyword;
 use App\Models\ReportSchedule;
 use App\Models\Role;
 use App\Models\Site;
+use App\Models\SiteCompetitor;
+use App\Models\SiteCompetitorSetting;
 use App\Models\User;
 use App\Services\LocalGrid\GridLimits;
+use App\Services\RankTracking\Competitors;
 use App\Services\RankTracking\RankLimits;
 use App\Support\AuditContext;
 use App\Support\ChangeHistory;
@@ -42,6 +45,7 @@ class UndoChange
         private readonly CurrentWorkspace $current,
         private readonly RankLimits $limits,
         private readonly GridLimits $gridLimits,
+        private readonly Competitors $competitors,
     ) {}
 
     /** Why this entry can't be undone, or null if it can be tried (a later change may still stop it). */
@@ -122,8 +126,10 @@ class UndoChange
     {
         $restoring = $log->action_type === 'DELETE';
         match (true) {
-            $model instanceof Client, $model instanceof Site, $model instanceof RankKeyword, $model instanceof MapGrid => Gate::authorize($restoring ? 'delete' : 'update', $model),
+            $model instanceof Client, $model instanceof Site, $model instanceof RankKeyword, $model instanceof MapGrid,
+            $model instanceof SiteCompetitor => Gate::authorize($restoring ? 'delete' : 'update', $model),
             $model instanceof ReportSchedule => Gate::authorize('createReports', $model->site),
+            $model instanceof SiteCompetitorSetting => Gate::authorize('manageRankTracking', $model->site),
             $model instanceof Role => $this->authoriseRole($model),
             default => Gate::authorize('update_'.ChangeHistory::resource($log->table_name)),
         };
@@ -161,6 +167,13 @@ class UndoChange
             $back[$field] = $change['old'] ?? null;
         }
 
+        $resuming = $model instanceof SiteCompetitor && array_key_exists('is_active', $back) && self::same($back['is_active'], true) && ! $model->is_active;
+        if ($resuming) {
+            // A paused competitor turned back on takes a place.
+            $this->competitors->lock((int) $model->site_id);
+            $this->competitors->ensureRoom((int) $model->site_id, 'undo');
+        }
+
         if ($back) {
             // Raw values, as they were logged (dates, JSON and flags as stored).
             $model->setRawAttributes(array_merge($current, $back));
@@ -172,6 +185,10 @@ class UndoChange
                 }
                 throw $e;
             }
+        }
+
+        if ($resuming) {
+            $this->competitors->backfill($model);
         }
 
         if ($permissions->isNotEmpty()) {
@@ -214,7 +231,7 @@ class UndoChange
         $role->logAuditChange('UPDATE', $logged, ['name' => $role->name]);
     }
 
-    /** A deleted record brought back (its parent must still exist; a keyword or grid needs room in the plan). */
+    /** A deleted record brought back (its parent must still exist; a keyword, grid or competitor needs room). */
     private function restore(AuditLog $log, Model $model): void
     {
         if (! method_exists($model, 'trashed') || ! $model->trashed()) {
@@ -241,6 +258,16 @@ class UndoChange
             }
         }
 
+        if ($model instanceof SiteCompetitor) {
+            if ($model->site()->withTrashed()->first()?->trashed()) {
+                throw UndoException::notUndoable('Its site was deleted: undo that first.');
+            }
+            $this->competitors->lock((int) $model->site_id);
+            if ($model->is_active) {
+                $this->competitors->ensureRoom((int) $model->site_id, 'undo');
+            }
+        }
+
         try {
             $model->restore();
         } catch (QueryException $e) {
@@ -248,6 +275,10 @@ class UndoChange
                 throw UndoException::conflict(ChangeHistory::recordType($log->table_name));
             }
             throw $e;
+        }
+
+        if ($model instanceof SiteCompetitor && $model->is_active) {
+            $this->competitors->backfill($model);
         }
     }
 

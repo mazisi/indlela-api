@@ -11,6 +11,8 @@ use App\Models\Report;
 use App\Models\ReportSchedule;
 use App\Models\Role;
 use App\Models\Site;
+use App\Models\SiteCompetitor;
+use App\Models\SiteCompetitorSetting;
 use App\Models\User;
 use App\Models\Workspace;
 use Illuminate\Database\Eloquent\Model;
@@ -45,8 +47,14 @@ final class ChangeHistory
         ], ['locked' => ['client', 'client_id'], 'restore' => true]],
         'rank_keywords' => [RankKeyword::class, 'Keyword', 'rank_tracking', [
             'keyword' => 'Keyword', 'location_name' => 'Location', 'language_code' => 'Language', 'device' => 'Device',
-            'frequency' => 'Frequency', 'weekly_day' => 'Weekly check day', 'tags' => 'Tags', ...self::ACTIVE,
+            'frequency' => 'Frequency', 'weekly_day' => 'Weekly check day', 'tags' => 'Tags', 'is_key' => 'Key keyword', ...self::ACTIVE,
         ], ['locked' => [], 'restore' => true]],
+        'site_competitors' => [SiteCompetitor::class, 'Competitor', 'rank_tracking', [
+            'domain' => 'Domain', 'name' => 'Name', ...self::ACTIVE,
+        ], ['locked' => ['domain'], 'restore' => true]],
+        'site_competitor_settings' => [SiteCompetitorSetting::class, 'Competitor alerts', 'rank_tracking', [
+            'alert_recipients' => 'Alert recipients',
+        ], ['locked' => [], 'restore' => false]],
         'map_grids' => [MapGrid::class, 'Local grid', 'local_grid', [
             'keyword' => 'Keyword', 'business_title' => 'Business', 'business_address' => 'Business address',
             'business_place_id' => 'Google place id', 'business_cid' => 'Google CID',

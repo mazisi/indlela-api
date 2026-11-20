@@ -21,7 +21,7 @@ class BulkRankKeywordsRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'action' => ['required', Rule::in(['activate', 'deactivate', 'delete', 'set_frequency'])],
+            'action' => ['required', Rule::in(['activate', 'deactivate', 'delete', 'set_frequency', 'mark_key', 'unmark_key'])],
             'ids' => ['required', 'array', 'min:1', 'max:'.config('indlela.rank_tracking.max_bulk_ids')],
             'ids.*' => ['required', 'integer', 'distinct'],
             'frequency' => ['nullable', 'required_if:action,set_frequency', Rule::in(RankKeyword::FREQUENCIES)],

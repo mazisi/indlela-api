@@ -76,7 +76,7 @@ class RankKeywords
      * Turning a keyword back on takes a place: 422 on `is_active` when the
      * workspace is at its limit.
      *
-     * @param  array{frequency?: string, weekly_day?: int, tags?: ?list<string>, is_active?: bool}  $data
+     * @param  array{frequency?: string, weekly_day?: int, tags?: ?list<string>, is_active?: bool, is_key?: bool}  $data
      */
     public function update(RankKeyword $keyword, array $data): RankKeyword
     {
@@ -95,7 +95,7 @@ class RankKeywords
     }
 
     /**
-     * activate / deactivate / delete / set_frequency on some of a site's
+     * activate / deactivate / delete / set_frequency / mark_key / unmark_key on some of a site's
      * keywords; all or nothing (unknown ids: 422 on `ids`; activating more
      * than the workspace has room for: 422 on `ids`, nothing changed).
      *
@@ -118,6 +118,7 @@ class RankKeywords
             $rows->each(fn (RankKeyword $k) => match ($action) {
                 'delete' => $k->delete(),
                 'set_frequency' => $k->update(['frequency' => $frequency]),
+                'mark_key', 'unmark_key' => $k->update(['is_key' => $action === 'mark_key']),
                 default => $k->update(['is_active' => $action === 'activate']),
             });
 

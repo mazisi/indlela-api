@@ -151,6 +151,7 @@ Workspaces see their counts and limits, and whether checks are paused, in `GET /
 ### Running it
 
 - **Horizon and the scheduler must run**: `php artisan horizon` and, locally, `php artisan schedule:work` (production: the usual `schedule:run` cron). `rank-tracking:post-checks` (daily 01:00) posts the day's checks to the Standard queue; `rank-tracking:collect` (every 5 minutes) collects finished ones; both run on the default `redis` queue.
+- **Competitors** (3–5 per site, on the same keywords, at no extra cost: they're read from the SERPs the checks already fetch): share of voice (top-10 positions held against them), head-to-head per keyword, suggestions, and alerts when one moves ahead on a **key keyword**. `rank-tracking:competitor-alerts` (daily 07:30 SAST) emails each site's new alerts to its recipients (template "Competitor alert"). History starts when a check stores its hosts. Rules: `docs/API.md` › Rank tracking › Competitor tracking.
 - Run them by hand: `php artisan rank-tracking:post-checks`, `php artisan rank-tracking:collect`. `php artisan rank-tracking:locations` downloads DataForSEO's location list (~270k places, a few minutes; run it once after adding credentials). It always comes from DataForSEO's live host, which is free, because the sandbox only has a one-country sample. Afterwards a weekly schedule refreshes it when it is over 30 days old; the location search never downloads it, it queues the download and says "Locations are still loading".
 
 ### Demo data (no DataForSEO needed)
@@ -160,6 +161,12 @@ php artisan db:seed --class=RankDemoSeeder
 ```
 
 Adds 60 keywords (10 phrases × South Africa, Johannesburg and a Sandton coordinate × desktop and mobile) with 90 days of results to `demo.indlela.local` in the first workspace: trends, this week's gains and drops, keywords outside the top 100, URL switches (cannibalisation) and SERP features. Re-running replaces only that site's keywords. Not part of `db:seed`. The demo keywords are active, so once DataForSEO is configured the nightly job checks them too.
+
+```bash
+php artisan db:seed --class=CompetitorDemoSeeder
+```
+
+After RankDemoSeeder: gives that site's checks made-up organic results, adds three rival agencies as competitors (a fourth shows as a suggestion), marks three phrases as key keywords and replays the alerts (older ones marked as emailed; no recipients are set). Additive and idempotent. Re-running RankDemoSeeder drops the competitor history with the keywords: run this again after it.
 
 ## Local map pack grid
 

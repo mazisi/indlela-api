@@ -212,6 +212,27 @@ return [
         'live_timeout' => 75,
         // Collection and "check now" jobs are small: the default redis connection (Horizon's supervisor-1).
         'queue_connection' => env('RANK_QUEUE_CONNECTION', 'redis'),
+        // Competitor tracking (no extra DataForSEO cost: it reads the SERPs the checks fetch).
+        // Active competitors per site.
+        'max_competitors_per_site' => (int) env('RANK_MAX_COMPETITORS_PER_SITE', 5),
+        // A new (or restored, resumed) competitor is filled in from the site's checks of this many days.
+        'competitor_backfill_days' => 90,
+        // Share-of-voice trend: ISO weeks, the current one included.
+        'competitor_trend_weeks' => 12,
+        // The daily alert email sends alerts not emailed yet, at most this many days old.
+        'competitor_alert_days' => 7,
+        // Alert email recipients per site, and alert rows listed in one email.
+        'max_alert_recipients' => 10,
+        'competitor_alert_email_rows' => 50,
+        // Domains suggested as competitors.
+        'competitor_suggestions' => 10,
+        // Big generic sites never suggested as competitors (subdomains too, e.g. en.wikipedia.org).
+        // SA directories (Yellow Pages, Snupit…) stay: they do compete for local searches.
+        'suggestion_blocklist' => [
+            'wikipedia.org', 'youtube.com', 'facebook.com', 'instagram.com', 'linkedin.com', 'twitter.com', 'x.com',
+            'tiktok.com', 'pinterest.com', 'reddit.com', 'quora.com', 'google.com', 'google.co.za', 'amazon.com',
+            'medium.com', 'tripadvisor.com', 'tripadvisor.co.za', 'yelp.com', 'apple.com', 'microsoft.com',
+        ],
     ],
 
     /*

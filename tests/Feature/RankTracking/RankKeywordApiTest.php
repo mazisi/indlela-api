@@ -115,7 +115,7 @@ class RankKeywordApiTest extends TestCase
         $this->assertSame([
             'id' => $k->id, 'keyword' => 'coffee beans',
             'location' => ['type' => 'code', 'code' => 2710, 'coordinate' => null, 'name' => 'South Africa'],
-            'language_code' => 'en', 'device' => 'desktop', 'frequency' => 'daily', 'weekly_day' => 0, 'tags' => ['brand'], 'is_active' => true,
+            'language_code' => 'en', 'device' => 'desktop', 'frequency' => 'daily', 'weekly_day' => 0, 'tags' => ['brand'], 'is_active' => true, 'is_key' => false,
             'position' => 3, 'previous_position' => 6, 'change_1d' => 3, 'change_7d' => 9, 'change_30d' => 37, 'best_position' => 3,
             'url' => 'https://www.karoo.co.za/beans', 'url_changed' => true, 'cannibalised' => true,
             'serp_features' => ['featured_snippet' => ['present' => true, 'ours' => false]],

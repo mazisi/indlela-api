@@ -35,7 +35,7 @@ class RankKeyword extends Model
 
     public const FREQUENCIES = [self::DAILY, self::WEEKLY];
 
-    protected $attributes = ['language_code' => 'en', 'frequency' => self::WEEKLY, 'weekly_day' => 0, 'is_active' => true];
+    protected $attributes = ['language_code' => 'en', 'frequency' => self::WEEKLY, 'weekly_day' => 0, 'is_active' => true, 'is_key' => false];
 
     protected $guarded = ['id'];
 
@@ -54,6 +54,7 @@ class RankKeyword extends Model
             'weekly_day' => 'integer',
             'tags' => 'array',
             'is_active' => 'boolean',
+            'is_key' => 'boolean',
         ];
     }
 

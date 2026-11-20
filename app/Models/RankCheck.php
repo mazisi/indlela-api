@@ -36,6 +36,7 @@ class RankCheck extends Model
             'position' => 'integer',
             'matching_urls' => 'array',
             'serp_features' => 'array',
+            'organic_domains' => 'array',
             'result_count' => 'integer',
             'cost' => 'float',
             'posted_at' => 'datetime',
