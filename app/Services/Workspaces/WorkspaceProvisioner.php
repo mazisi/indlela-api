@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Workspace;
 use App\Support\CurrentWorkspace;
 use App\Support\Permissions;
+use App\Support\PlatformWorkspace;
 use Illuminate\Support\Facades\DB;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -22,6 +23,11 @@ use Spatie\Permission\PermissionRegistrar;
  *    users, roles, login history or workspace settings.
  *  - Analyst: the SEO tools for their assigned clients.
  *  - Client: read-only, their assigned clients only (an agency's client login).
+ *
+ * In the platform workspace only (PlatformWorkspace), Owner also gets the
+ * platform pages and a Superuser role is added (Indlela staff: every
+ * grantable permission plus Platform › Usage). In every other workspace the
+ * platform permissions are taken off any role that holds them.
  */
 class WorkspaceProvisioner
 {
@@ -52,6 +58,9 @@ class WorkspaceProvisioner
             ],
         ],
     ];
+
+    /** @var array{description: string, all_clients: bool} the platform workspace's extra role */
+    public const SUPERUSER = ['description' => 'Indlela staff: everything, plus Platform › Usage', 'all_clients' => true];
 
     public function __construct(private readonly CurrentWorkspace $current) {}
 
@@ -90,7 +99,7 @@ class WorkspaceProvisioner
                 ['name' => Role::OWNER, 'guard_name' => 'web', 'workspace_id' => $workspace->id],
                 ['description' => 'Full access: users, roles, workspace settings and every client', 'all_clients' => true],
             );
-            $owner->syncPermissions(Permissions::all());
+            $owner->syncPermissions(Permissions::forWorkspace($workspace));
 
             foreach (self::ROLES as $name => $role) {
                 $model = Role::withTrashed()->inWorkspace($workspace->id)->firstOrCreate(
@@ -102,8 +111,35 @@ class WorkspaceProvisioner
                     $model->syncPermissions(Permissions::forGroupLevels($role['levels']));
                 }
             }
+
+            PlatformWorkspace::is($workspace) ? $this->ensureSuperuser($workspace) : $this->revokePlatformPermissions($workspace);
         });
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    /** The platform workspace's Superuser role, made once (later edits in Settings › Roles are kept). */
+    private function ensureSuperuser(Workspace $workspace): void
+    {
+        $role = Role::withTrashed()->inWorkspace($workspace->id)->firstOrCreate(
+            ['name' => Role::SUPERUSER, 'guard_name' => 'web', 'workspace_id' => $workspace->id],
+            self::SUPERUSER,
+        );
+
+        if ($role->wasRecentlyCreated) {
+            $role->syncPermissions(Permissions::grantableIn($workspace));
+        }
+    }
+
+    /**
+     * Platform permissions exist only in the platform workspace: off every
+     * role here (e.g. this was the platform workspace until the config moved).
+     */
+    private function revokePlatformPermissions(Workspace $workspace): void
+    {
+        DB::table('role_has_permissions')
+            ->whereIn('role_id', Role::withTrashed()->inWorkspace($workspace->id)->select('id'))
+            ->whereIn('permission_id', DB::table('permissions')->whereIn('name', Permissions::platformOnly())->select('id'))
+            ->delete();
     }
 }

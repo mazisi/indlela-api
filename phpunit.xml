@@ -39,6 +39,12 @@
         <env name="AUDIT_QUEUE_CONNECTION" value="sync"/>
         <env name="AUDIT_DELAY_MS" value="0"/>
         <env name="PAGESPEED_API_KEY" value=""/>
+        <env name="RANK_QUEUE_CONNECTION" value="sync"/>
+        <env name="RANK_LOCATIONS_QUEUE_CONNECTION" value="sync"/>
+        <env name="DATAFORSEO_LOGIN" value="" force="true"/>
+        <env name="DATAFORSEO_PASSWORD" value="" force="true"/>
+        <env name="DATAFORSEO_SANDBOX" value="true" force="true"/>
+        <env name="INDLELA_PLATFORM_WORKSPACE" value="" force="true"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

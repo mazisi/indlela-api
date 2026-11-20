@@ -55,4 +55,16 @@ return [
         'key' => env('PAGESPEED_API_KEY'),
     ],
 
+    // DataForSEO SERP API (rank tracking), HTTP Basic auth. Sandbox answers with
+    // sample data for free; set DATAFORSEO_SANDBOX=false for real (billed) checks.
+    'dataforseo' => [
+        'login' => env('DATAFORSEO_LOGIN'),
+        'password' => env('DATAFORSEO_PASSWORD'),
+        'sandbox' => (bool) env('DATAFORSEO_SANDBOX', true),
+        'base_url' => env('DATAFORSEO_SANDBOX', true) ? 'https://sandbox.dataforseo.com' : 'https://api.dataforseo.com',
+        // Free reference calls (location list, account balance) always use the
+        // live host: the sandbox's location list is a one-country sample.
+        'live_url' => 'https://api.dataforseo.com',
+    ],
+
 ];
