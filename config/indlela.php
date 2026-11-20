@@ -214,4 +214,24 @@ return [
         'queue_connection' => env('RANK_QUEUE_CONNECTION', 'redis'),
     ],
 
+    /*
+    | White-label reports: PDF (dompdf), share links and the monthly email.
+    */
+    'reports' => [
+        // Generation renders a PDF: the long-job connection (Horizon's supervisor-long).
+        'queue_connection' => env('REPORTS_QUEUE_CONNECTION', 'redis-long'),
+        // Share link made when a report is emailed (the email's button), in days.
+        'email_share_days' => 90,
+        // Choices for POST /reports/{report}/share (null = no expiry).
+        'share_days' => [7, 30, 90],
+        // Recipients per send and per schedule.
+        'max_recipients' => 10,
+        // Reports per bulk action (the list shows at most 100 a page).
+        'max_bulk_ids' => 100,
+        // A change this big (%, or keywords) is "significant" and leads the summary.
+        'summary_pct_threshold' => 5,
+        'summary_keyword_threshold' => 3,
+        'summary_health_threshold' => 5,
+    ],
+
 ];

@@ -17,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
+use RuntimeException;
 
 /**
  * The workspace switcher (any member) and Settings › Workspace
@@ -67,8 +68,9 @@ class WorkspaceController extends Controller
     }
 
     /**
-     * Rename the current workspace and/or set its logo (white-label reports):
-     * `name`, `logo` (image, ≤ 2 MB) or `remove_logo`.
+     * Rename the current workspace and/or set its white-label branding:
+     * `name`, `logo` (image, ≤ 2 MB) or `remove_logo`, `brand_color` (#RRGGBB
+     * or null for the default).
      */
     public function update(Request $request, CurrentWorkspace $current): WorkspaceResource
     {
@@ -78,20 +80,29 @@ class WorkspaceController extends Controller
             'name' => ['sometimes', 'required', 'string', 'min:2', 'max:100'],
             'logo' => ['sometimes', 'image', 'mimes:png,jpg,jpeg,svg,webp', 'max:2048'],
             'remove_logo' => ['sometimes', 'boolean'],
-        ]);
+            'brand_color' => ['sometimes', 'nullable', 'string', 'regex:/^#[0-9a-fA-F]{6}$/'],
+        ], ['brand_color.regex' => 'Choose a colour as #RRGGBB, e.g. #1f4e79.']);
         $workspace = $current->get();
 
         if (isset($data['name'])) {
             $workspace->name = preg_replace('/\s+/', ' ', trim($data['name']));
         }
+        if (array_key_exists('brand_color', $data)) {
+            $workspace->brand_color = $data['brand_color'] === null ? null : strtolower($data['brand_color']);
+        }
+        $old = $workspace->logo_path;
         if ($request->hasFile('logo') || ($data['remove_logo'] ?? false)) {
-            $old = $workspace->logo_path;
-            $workspace->logo_path = $request->hasFile('logo') ? $request->file('logo')->store("workspaces/{$workspace->id}") : null;
-            if ($old) {
-                Storage::delete($old);
+            $path = $request->hasFile('logo') ? $request->file('logo')->store("workspaces/{$workspace->id}") : null;
+            // The s3 disk doesn't throw: a failed write returns false (no row pointing at a missing file).
+            if ($path === false) {
+                throw new RuntimeException('The logo could not be stored.');
             }
+            $workspace->logo_path = $path;
         }
         $workspace->save();
+        if ($old && $old !== $workspace->logo_path) {
+            Storage::delete($old);
+        }
 
         return WorkspaceResource::make($workspace);
     }

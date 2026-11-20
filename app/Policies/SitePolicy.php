@@ -79,6 +79,18 @@ class SitePolicy
         return $this->allowSite($user, 'update_rank_tracking', $site);
     }
 
+    /** Reports: the site's reports and its schedule. */
+    public function viewReports(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'view_reports', $site);
+    }
+
+    /** Reports: generate a report, change the monthly schedule. */
+    public function createReports(User $user, Site $site): Response
+    {
+        return $this->allowSite($user, 'create_reports', $site);
+    }
+
     public function allowSite(User $user, string $permission, Site $site): Response
     {
         if (! $this->inCurrentWorkspace($site)) {

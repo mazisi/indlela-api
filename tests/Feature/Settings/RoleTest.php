@@ -64,7 +64,7 @@ class RoleTest extends TestCase
         $manager = $this->makeUser(Role::MANAGER);
         $client = $this->makeUser(Role::CLIENT);
 
-        $this->assertTrue($this->userCan($manager, 'approve_reports'));
+        $this->assertTrue($this->userCan($manager, 'delete_reports'));
         $this->assertTrue($this->userCan($manager, 'update_settings_email_templates'));
         $this->assertFalse($this->userCan($manager, 'view_settings_users'));
         $this->assertTrue($this->userCan($client, 'view_reports'));
@@ -93,11 +93,11 @@ class RoleTest extends TestCase
         $this->addToWorkspace($member, $this->workspace(), 'Intern');
 
         $this->actingAs($this->owner, 'sanctum')
-            ->putJson("/api/settings/roles/{$role->id}/permissions", ['permissions' => ['view_reports', 'create_reports', 'approve_reports', 'update_site_audit']])
+            ->putJson("/api/settings/roles/{$role->id}/permissions", ['permissions' => ['view_reports', 'create_reports', 'update_site_audit']])
             ->assertOk()
-            ->assertJsonPath('data.permissions', ['approve_reports', 'create_reports', 'update_site_audit', 'view_reports', 'view_site_audit']);
+            ->assertJsonPath('data.permissions', ['create_reports', 'update_site_audit', 'view_reports', 'view_site_audit']);
 
-        $this->assertTrue($this->userCan($member, 'approve_reports'));
+        $this->assertTrue($this->userCan($member, 'create_reports'));
         $this->assertTrue($this->userCan($member, 'view_site_audit'), 'view comes with any other action');
         $this->assertFalse($this->userCan($member, 'delete_reports'));
 
@@ -105,7 +105,7 @@ class RoleTest extends TestCase
         $this->assertSame('update', $entry['action']);
         $this->assertSame('Intern', $entry['record_label']);
         $this->assertEqualsCanonicalizing([
-            ['field' => 'reports', 'old' => 'View', 'new' => 'View, Create, Approve'],
+            ['field' => 'reports', 'old' => 'View', 'new' => 'View, Create'],
             ['field' => 'site_audit', 'old' => 'No access', 'new' => 'View, Update'],
         ], $entry['changes']);
     }

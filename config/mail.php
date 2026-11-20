@@ -110,6 +110,18 @@ return [
     |
     */
 
+    /*
+    | Markdown mail (TemplatedMail: sign-in, password and invitation emails)
+    | uses the Indlela theme, resources/views/vendor/mail/html/themes/indlela.css:
+    | the app's navy, ink and borders. Client report emails carry the
+    | workspace's own brand colour instead (emails/client-report.blade.php).
+    */
+
+    'markdown' => [
+        'theme' => env('MAIL_MARKDOWN_THEME', 'indlela'),
+        'paths' => [resource_path('views/vendor/mail')],
+    ],
+
     'from' => [
         'address' => env('MAIL_FROM_ADDRESS', 'hello@example.com'),
         'name' => env('MAIL_FROM_NAME', env('APP_NAME', 'Laravel')),

@@ -11,6 +11,7 @@ use App\Services\RankTracking\RankChecker;
 use App\Services\RankTracking\RankLocations;
 use App\Services\RankTracking\RankSpend;
 use App\Services\RankTracking\SerpApi;
+use App\Services\Reports\Reports;
 use App\Services\SiteAudit\SiteAudits;
 use App\Support\CurrentWorkspace;
 use Illuminate\Foundation\Inspiring;
@@ -144,3 +145,17 @@ Artisan::command('rank-tracking:locations {--if-stale}', function (RankLocations
 })->purpose('Refresh the DataForSEO location list');
 
 Schedule::command('rank-tracking:locations --if-stale')->weeklyOn(0, '03:00')->withoutOverlapping()->onOneServer();
+
+// Monthly client reports: for each active schedule whose day of the month is
+// today and that hasn't run this month, the previous calendar month's report,
+// emailed to the schedule's recipients once generated. Spans workspaces;
+// each report is made in its site's workspace and its job carries it. Safe
+// to re-run: a schedule is claimed once a month (Reports::runScheduled).
+Artisan::command('reports:run-scheduled', function (Reports $reports) {
+    $queued = $reports->runScheduled();
+    $this->info("Queued {$queued} scheduled report(s).");
+})->purpose('Generate and email the monthly client reports due today');
+
+// Hourly: each schedule picks its own hour (send_hour, SAST); one whose hour
+// has passed runs on the next hourly run, so a missed hour catches up.
+Schedule::command('reports:run-scheduled')->hourlyAt(0)->timezone('Africa/Johannesburg')->withoutOverlapping()->onOneServer();

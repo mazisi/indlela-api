@@ -19,6 +19,7 @@ enum EmailTemplateType: string
     case UserInvited = 'user_invited';
     case AddedToWorkspace = 'added_to_workspace';
     case WorkspaceCreated = 'workspace_created';
+    case ClientReport = 'client_report';
 
     public function label(): string
     {
@@ -28,6 +29,7 @@ enum EmailTemplateType: string
             self::UserInvited => 'Invited (new account)',
             self::AddedToWorkspace => 'Added to the workspace (existing account)',
             self::WorkspaceCreated => 'Welcome after sign-up',
+            self::ClientReport => 'Client report (white-label)',
         };
     }
 
@@ -39,6 +41,7 @@ enum EmailTemplateType: string
             self::UserInvited => 'Sent when someone without an account is added to the workspace, with a link to choose their password.',
             self::AddedToWorkspace => 'Sent when someone who already has an account is added to the workspace.',
             self::WorkspaceCreated => 'Sent to the new Owner when they sign up and create a workspace.',
+            self::ClientReport => 'Sends an SEO report to a client, from your workspace\'s name, with the PDF attached and a button to the online report. Monthly when a schedule is set.',
         };
     }
 
@@ -88,6 +91,18 @@ enum EmailTemplateType: string
                 'app_name' => 'The application name',
                 'url' => 'The sign-in link (also rendered as the button)',
             ],
+            // White-label: no app_name; the client sees only the workspace.
+            self::ClientReport => [
+                'workspace' => 'Your workspace (e.g. Acme Digital)',
+                'client' => 'The client (e.g. Karoo Coffee)',
+                'site' => 'The website (e.g. karoocoffee.co.za)',
+                'month' => 'The report period (e.g. October 2026)',
+                'title' => 'The report title',
+                'summary' => 'The report summary as bullet points (e.g. Search traffic up 14% (5,190 clicks))',
+                'note' => 'The note on the report, if any',
+                'message' => 'The personal message typed when sending, if any',
+                'url' => 'The online report link (also rendered as the button)',
+            ],
         };
     }
 
@@ -98,6 +113,7 @@ enum EmailTemplateType: string
             self::PasswordReset => 'Choose a new password',
             self::UserInvited => 'Choose your password',
             self::AddedToWorkspace, self::WorkspaceCreated => 'Sign in',
+            self::ClientReport => 'View the report online',
             self::LoginPin => null,
         };
     }
@@ -110,6 +126,7 @@ enum EmailTemplateType: string
             self::UserInvited => 'You have been given {{app_name}} access to {{workspace}}',
             self::AddedToWorkspace => 'You have been added to {{workspace}} on {{app_name}}',
             self::WorkspaceCreated => 'Welcome to {{app_name}}: {{workspace}} is ready',
+            self::ClientReport => 'Your {{month}} SEO report from {{workspace}}',
         };
     }
 
@@ -142,6 +159,15 @@ enum EmailTemplateType: string
                 <p>Your workspace <strong>{{workspace}}</strong> is ready, and you are its Owner.</p>
                 <p>Next: add your clients and their sites, then invite your team from Settings › Users.</p>
                 HTML,
+            self::ClientReport => <<<'HTML'
+                <p>Hello,</p>
+                {{message}}
+                <p>Here is the {{month}} SEO report for <strong>{{client}}</strong> ({{site}}). In short:</p>
+                {{summary}}
+                {{note}}
+                <p>Open the full report online with the button below. The PDF is attached.</p>
+                <p>Kind regards,<br>{{workspace}}</p>
+                HTML,
         };
     }
 
@@ -150,6 +176,7 @@ enum EmailTemplateType: string
     {
         return match ($this) {
             self::WorkspaceCreated => 'The new Owner',
+            self::ClientReport => 'The report recipients',
             default => 'The user',
         };
     }
